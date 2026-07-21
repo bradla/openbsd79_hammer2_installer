@@ -4,7 +4,7 @@ PROG=	fsck_hammer2
 SRCS=	fsck_hammer2.c test.c ondisk.c subs.c xxhash.c icrc32.c
 MAN=	fsck_hammer2.8
 
-.PATH:  ../../sys/lib/libkern  ../../sys/hammer2  ../../sys/hammer2/xxhash
+.PATH:  ../hammer2 ../../sys/lib/libkern  ../../sys/hammer2  ../../sys/hammer2/xxhash
 
 WARNS=	5
 

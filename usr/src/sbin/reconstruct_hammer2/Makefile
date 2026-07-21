@@ -1,10 +1,10 @@
 .include <bsd.own.mk>
 
-PROG=	destroy_hammer2
+PROG=	reconstruct_hammer2
 SRCS=	destroy.c ondisk.c subs.c xxhash.c icrc32.c
 NOMAN=	yes
 
-.PATH:  ../../sys/lib/libkern  ../../sys/hammer2  ../../sys/hammer2/xxhash
+.PATH:  ../hammer2 ../../sys/lib/libkern  ../../sys/hammer2  ../../sys/hammer2/xxhash
 
 WARNS=	5
 
