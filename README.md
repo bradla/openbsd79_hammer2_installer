@@ -1,19 +1,44 @@
-# CRITICAL: HAMMER2 partition 'a' starts at offset 2048 (NOT the A6 offset 128),
-# so the OpenBSD disklabel at sector 129 survives HAMMER2's 64KB volume header.
-# Example
+# HAMMER2 on OpenBSD — Disk Setup
+
+> ** CRITICAL: partition offset**
+>
+> The HAMMER2 partition `a` must start at offset **2048** — *not* the
+> default offset 128 used for A6 partitions. This keeps the OpenBSD
+> disklabel at sector 129 clear of HAMMER2's 64 KB volume header, which
+> would otherwise overwrite it.
+
+## 1. Create the partition
+
+Run the interactive disklabel editor:
+
+```sh
 disklabel -E sd1
-a
-a
-2048
-*
-HAMMER2
-w
-q
+```
 
-# @DATA is default label
+At the prompts:
+
+| Prompt          | Input     | Note                          |
+|-----------------|-----------|-------------------------------|
+| command         | `a`       | add partition                 |
+| partition       | `a`       |                               |
+| offset          | `2048`    | **required** — see note above |
+| size            | `*`       | rest of disk                  |
+| FS type         | `HAMMER2` |                               |
+| command         | `w`       | write label                   |
+| command         | `q`       | quit                          |
+
+## 2. Create the filesystem
+
+```sh
 newfs_hammer2 /dev/sd1a
+```
 
-''Volume /dev/sd1a       size 465.76GB
+The default PFS label is `@DATA`.
+
+### Example output
+
+```
+Volume /dev/sd1a       size 465.76GB
 checkvolu header 0 0000007470800000/0000007470c06000
 ---------------------------------------------
 version:          2
@@ -30,4 +55,5 @@ PFS "LOCAL"
     fsid ede4a898-ac95-47f5-a036-b099b9765c19
 PFS "DATA"
     clid 4b80d00b-f5f1-4e2d-802d-42478b9fb738
-    fsid 831220e0-c637-47f6-8632-46660841dc07''
+    fsid 831220e0-c637-47f6-8632-46660841dc07
+```
