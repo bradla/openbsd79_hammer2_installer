@@ -13,7 +13,7 @@ q
 # @DATA is default label
 newfs_hammer2 /dev/sd1a
 
-Volume /dev/sd1a       size 465.76GB
+''Volume /dev/sd1a       size 465.76GB
 checkvolu header 0 0000007470800000/0000007470c06000
 ---------------------------------------------
 version:          2
@@ -30,4 +30,4 @@ PFS "LOCAL"
     fsid ede4a898-ac95-47f5-a036-b099b9765c19
 PFS "DATA"
     clid 4b80d00b-f5f1-4e2d-802d-42478b9fb738
-    fsid 831220e0-c637-47f6-8632-46660841dc07
+    fsid 831220e0-c637-47f6-8632-46660841dc07''
