@@ -462,7 +462,7 @@ ask_root_fstype() {
 # disklabel -F knows nothing about hammer2, so the fragment (with the @ROOT
 # PFS label mount syntax) is written here directly.
 hammer2_autolayout() {
-	local _disk=$1 _f=$2 _swap
+	local _disk=$1 _f=$2 _swap _pfs
 
 	# The ramdisk sysctl (distrib/special) does not know hw.physmem and
 	# prints nothing on stdout, which must never reach the arithmetic below
@@ -500,6 +500,15 @@ hammer2_autolayout() {
 	# and rc drops to single user.  (fsck_hammer2 does accept -p; teaching
 	# it to strip @LABEL is the other half of the fix, in the tool.)
 	echo "/dev/${_disk}d@ROOT / hammer2 rw 0 0" >$_f
+	# Extra PFS labels carved out of the SAME HAMMER2 volume as separate
+	# mount points.  They share the volume's free space (no fixed per-PFS
+	# size).  Space-separated LABEL:mountpoint pairs, set in the
+	# environment to enable, e.g.
+	#     HAMMER2_PFS="USR:/usr HOME:/home VAR:/var TMP:/tmp"
+	# Empty (the default) reproduces the single-@ROOT layout.
+	for _pfs in $HAMMER2_PFS; do
+		echo "/dev/${_disk}d@${_pfs%%:*} ${_pfs##*:} hammer2 rw 0 0" >>$_f
+	done
 	echo "/dev/${_disk}a /boot ffs rw 1 2" >>$_f
 }
 
@@ -548,7 +557,7 @@ disklabel_autolayout() {
 
 # Create a partition table and configure the partition layout for disk $1.
 configure_disk() {
-	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt _rdev _lbl
+	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt _rdev _lbl _h2done _Largs _p _m _f _r
 
 	make_dev $_disk || return
 
@@ -601,11 +610,21 @@ configure_disk() {
 		# them. Ignore other filesystems.
 		while read _pp _mp _fstype _rest; do
 			if [[ $_fstype == hammer2 ]]; then
-				# /dev/sd0a@LABEL -> raw device + PFS label.
+				# /dev/sd0d@LABEL -> device + PFS label.  Many
+				# PFSes can share one HAMMER2 volume, so newfs
+				# the device only once, creating every PFS the
+				# fstab puts on it via repeated -L.
 				_rdev=${_pp%@*}
-				_lbl=${_pp##*@}
-				[[ $_lbl == $_pp ]] && _lbl=ROOT
-				newfs_hammer2 -L $_lbl $_rdev
+				if [[ " $_h2done " != *" $_rdev "* ]]; then
+					_Largs=
+					while read _p _m _f _r; do
+						[[ $_f == hammer2 && ${_p%@*} == $_rdev ]] || continue
+						_lbl=${_p##*@}; [[ $_lbl == $_p ]] && _lbl=ROOT
+						_Largs="$_Largs -L $_lbl"
+					done <$_fstab
+					newfs_hammer2 $_Largs $_rdev
+					_h2done="$_h2done $_rdev"
+				fi
 				FSENT="$FSENT $_mp!$_pp!$_fstype"
 				continue
 			fi
