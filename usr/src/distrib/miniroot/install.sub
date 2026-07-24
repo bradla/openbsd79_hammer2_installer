@@ -501,14 +501,13 @@ hammer2_autolayout() {
 	# it to strip @LABEL is the other half of the fix, in the tool.)
 	echo "/dev/${_disk}d@ROOT / hammer2 rw 0 0" >$_f
 	# Extra PFS labels carved out of the SAME HAMMER2 volume as separate
-	# mount points.  They share the volume's free space (no fixed per-PFS
-	# size).  Space-separated LABEL:mountpoint pairs, set in the
-	# environment to enable, e.g.
-	#     HAMMER2_PFS="USR:/usr HOME:/home"
-	# newfs_hammer2 caps format-time PFSes at MAXLABELS-1 == 3 named labels
-	# (ROOT + up to 2 here), since they live in the super-root's embedded
-	# blockset (HAMMER2_SET_COUNT slots).  More would need `hammer2
-	# pfs-create' after mount.  Empty (default) = single-@ROOT layout.
+	# mount points, mimicking the FFS autolayout (/home, /var, /tmp).  They
+	# share the volume's free space (no fixed per-PFS size).  Space-separated
+	# LABEL:mountpoint pairs; override or set empty (single-@ROOT) via the
+	# environment.  newfs_hammer2 writes at most MAXLABELS-1 (3) PFSes into
+	# the super-root's embedded blockset; configure_disk() creates ROOT + 2
+	# there and any beyond via `hammer2 pfs-create'.
+	: ${HAMMER2_PFS="HOME:/home VAR:/var TMP:/tmp"}
 	for _pfs in $HAMMER2_PFS; do
 		echo "/dev/${_disk}d@${_pfs%%:*} ${_pfs##*:} hammer2 rw 0 0" >>$_f
 	done
@@ -560,7 +559,7 @@ disklabel_autolayout() {
 
 # Create a partition table and configure the partition layout for disk $1.
 configure_disk() {
-	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt _rdev _lbl _h2done _Largs _p _m _f _r
+	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt _rdev _lbl _h2done _Largs _p _m _f _r _extra _n
 
 	make_dev $_disk || return
 
@@ -614,18 +613,32 @@ configure_disk() {
 		while read _pp _mp _fstype _rest; do
 			if [[ $_fstype == hammer2 ]]; then
 				# /dev/sd0d@LABEL -> device + PFS label.  Many
-				# PFSes can share one HAMMER2 volume, so newfs
-				# the device only once, creating every PFS the
-				# fstab puts on it via repeated -L.
+				# PFSes share one HAMMER2 volume: newfs the device
+				# once.  newfs_hammer2 writes at most 3 labels into
+				# the super-root's embedded blockset, so create the
+				# first <=3 with -L and any overflow with `hammer2
+				# pfs-create' via a temporary @ROOT mount.
 				_rdev=${_pp%@*}
 				if [[ " $_h2done " != *" $_rdev "* ]]; then
-					_Largs=
+					_Largs= _extra= _n=0
 					while read _p _m _f _r; do
 						[[ $_f == hammer2 && ${_p%@*} == $_rdev ]] || continue
 						_lbl=${_p##*@}; [[ $_lbl == $_p ]] && _lbl=ROOT
-						_Largs="$_Largs -L $_lbl"
+						if [[ $_n -lt 3 ]]; then
+							_Largs="$_Largs -L $_lbl"; _n=$(($_n + 1))
+						else
+							_extra="$_extra $_lbl"
+						fi
 					done <$_fstab
 					newfs_hammer2 $_Largs $_rdev
+					if [[ -n $_extra ]]; then
+						mkdir -p /tmp/i/h2mnt
+						mount_hammer2 ${_rdev}@ROOT /tmp/i/h2mnt
+						for _lbl in $_extra; do
+							hammer2 -s /tmp/i/h2mnt pfs-create $_lbl
+						done
+						umount /tmp/i/h2mnt
+					fi
 					_h2done="$_h2done $_rdev"
 				fi
 				FSENT="$FSENT $_mp!$_pp!$_fstype"
