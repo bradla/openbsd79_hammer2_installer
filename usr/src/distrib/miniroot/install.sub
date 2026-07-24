@@ -504,8 +504,11 @@ hammer2_autolayout() {
 	# mount points.  They share the volume's free space (no fixed per-PFS
 	# size).  Space-separated LABEL:mountpoint pairs, set in the
 	# environment to enable, e.g.
-	#     HAMMER2_PFS="USR:/usr HOME:/home VAR:/var TMP:/tmp"
-	# Empty (the default) reproduces the single-@ROOT layout.
+	#     HAMMER2_PFS="USR:/usr HOME:/home"
+	# newfs_hammer2 caps format-time PFSes at MAXLABELS-1 == 3 named labels
+	# (ROOT + up to 2 here), since they live in the super-root's embedded
+	# blockset (HAMMER2_SET_COUNT slots).  More would need `hammer2
+	# pfs-create' after mount.  Empty (default) = single-@ROOT layout.
 	for _pfs in $HAMMER2_PFS; do
 		echo "/dev/${_disk}d@${_pfs%%:*} ${_pfs##*:} hammer2 rw 0 0" >>$_f
 	done
