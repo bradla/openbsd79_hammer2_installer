@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <fstab.h>
 #include <unistd.h>
 #include <errno.h>
 #include <err.h>
@@ -63,6 +64,9 @@ static struct mntopt mopts[] = {
  */
 #define DMSG_LISTEN_PORT	987
 
+/* Optional admin tool; absent on a base-set-only install. */
+#define _PATH_HAMMER2		"/sbin/hammer2"
+
 /*
  * Connect to the local cluster controller (the "hammer2 service" daemon),
  * starting it if necessary, and hand the descriptor to the kernel mount so
@@ -78,8 +82,15 @@ cluster_connect(void)
 	struct sockaddr_in lsin;
 	int fd;
 
-	/* Start the hammer2 service if it isn't already running (best effort). */
-	(void)system("/sbin/hammer2 -q service");
+	/*
+	 * Start the hammer2 service if it isn't already running (best effort).
+	 * hammer2(8) is an optional admin tool and is not in the base set, so
+	 * probe first and swallow the shell's diagnostics: without this every
+	 * mount (including the three rc does while booting a HAMMER2 root)
+	 * printed "sh: /sbin/hammer2: not found" on the console.
+	 */
+	if (access(_PATH_HAMMER2, X_OK) == 0)
+		(void)system(_PATH_HAMMER2 " -q service >/dev/null 2>&1");
 
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
@@ -128,9 +139,33 @@ main(int argc, char **argv)
 
 	/* Only the mount point need be specified in update mode. */
 	if (initflags & MNT_UPDATE) {
+		struct fstab *fs;
+
+		if (argc == 2) {
+			/* "special node" form: keep the special. */
+			strlcpy(canon_dev, *argp, MAXPATHLEN);
+			args.fspec = canon_dev;
+			argp++;
+			goto ignore_special;
+		}
 		if (argc != 1) {
 			usage("missing parameter (node)");
 			/* not reached */
+		}
+		/*
+		 * Only the node was given (this is what mount(8) does for
+		 * "mount -uw /").  Resolve the special from fstab and hand it
+		 * to the kernel anyway: a HAMMER2 root is mounted before /dev
+		 * exists, so the kernel carries the placeholder name
+		 * "root_device@ROOT" in f_mntfromname until an update supplies
+		 * the real device.  mount(8), df(1) and /etc/rc's
+		 * rootdisk_nodes() all read that name -- the latter feeds it
+		 * to stat(1) and fails noisily.
+		 */
+		if ((fs = getfsfile(*argp)) != NULL &&
+		    strcmp(fs->fs_vfstype, MOUNT_HAMMER2) == 0) {
+			strlcpy(canon_dev, fs->fs_spec, MAXPATHLEN);
+			args.fspec = canon_dev;
 		}
 		goto ignore_special;
 	}

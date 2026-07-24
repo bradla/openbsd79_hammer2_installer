@@ -626,6 +626,25 @@ hammer2_mount(struct mount *mp, const char *path, void *data,
 			return (vfs_export(mp, &pmp->pm_export,
 			    &args->export_info));
 		}
+
+		/*
+		 * Refresh the mounted-from name.  On a HAMMER2 root the
+		 * boot-time mount had no /dev to name the device with, so
+		 * hammer2_mountroot() left the placeholder "root_device@ROOT"
+		 * in f_mntfromname.  /etc/rc's rootdisk_nodes() feeds
+		 * `mount | grep ' / '` to stat(1), so the placeholder shows up
+		 * as "stat: root_device@ROOT: No such file or directory"
+		 * followed by two mknod usage errors -- and mount(8)/df(1)
+		 * report a device that does not exist.  The rw remount from
+		 * rc (mount -uw /) passes the real fspec, so adopt it here.
+		 */
+		if (copyinstr(args->fspec, devstr, sizeof(devstr), NULL) == 0 &&
+		    devstr[0] != '\0') {
+			bzero(mp->mnt_stat.f_mntfromname, MNAMELEN);
+			strlcpy(mp->mnt_stat.f_mntfromname, devstr, MNAMELEN);
+			bzero(mp->mnt_stat.f_mntfromspec, MNAMELEN);
+			strlcpy(mp->mnt_stat.f_mntfromspec, devstr, MNAMELEN);
+		}
 		return (0);
 	}
 
@@ -1222,7 +1241,23 @@ hammer2_mountroot(void)
 	TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	(void)hammer2_statfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp);
-	inittodr(0);
+
+	/*
+	 * Hand inittodr() a filesystem timestamp, the way ffs_mountroot()
+	 * passes the superblock time.  inittodr(0) means "the filesystem was
+	 * last written in 1970", which is older than the RTC by decades, so
+	 * every boot printed "WARNING: preposterous time in file system /
+	 * CHECK AND RESET THE DATE!".  The PFS root inode's mtime is the
+	 * closest equivalent (HAMMER2 time: microseconds since the epoch).
+	 */
+	{
+		hammer2_pfs_t *rpmp = MPTOPMP(mp);
+		time_t base = 0;
+
+		if (rpmp != NULL && rpmp->iroot != NULL)
+			base = (time_t)(rpmp->iroot->meta.mtime / 1000000);
+		inittodr(base);
+	}
 	return (0);
 }
 
@@ -2160,74 +2195,67 @@ restart:
 }
 
 /*
- * Initiate an asynchronous filesystem sync and, with hysteresis,
- * stall if the internal data structure count becomes too bloated. vfs_allocate_syncvnode
+ * Frontend back-pressure.
+ *
+ * HAMMER2 allocates chains, dios and the per-write-XOP scratch buffers from
+ * the M_HAMMER2 malloc(9) type, which has a per-type ceiling (kmeminit() gives
+ * every type 60% of nkmempages).  Nothing in this port bounded that.  Under a
+ * sustained write load -- the post-install KARL relink is the canonical one --
+ * usage marched all the way to ks_limit, and from then on every
+ * malloc(M_HAMMER2, M_WAITOK) slept INFSLP in kern_malloc.c.  The syncer,
+ * which is the thing that would have freed the memory, slept there too, so the
+ * wedge was permanent and total: reads and pipes still worked, but the first
+ * process to WRITE to the filesystem hung forever (login writing utmp is what
+ * made it look like "the login prompt hangs after the username").
+ *
+ * Stall the FRONTEND while the budget is more than half spent so the backend
+ * XOP workers and the syncer can always allocate and drain.  Never call this
+ * from a backend thread or from the syncer -- that reintroduces the deadlock.
+ *
+ * DragonFly applies this via vfs_modifying(), a VFS hook OpenBSD does not
+ * have, which is why hammer2_vfs_modifying() below is commented out.
+ *
+ * Two knobs, whichever trips first:
+ *   - hammer2_count_chain_modified vs hammer2_limit_dirty_chains: the dirty
+ *     chain count, maintained correctly everywhere in this port.
+ *   - kmemstats[M_HAMMER2].ks_memuse vs ks_limit: the resource that actually
+ *     ran out.  Only available with option KMEMSTATS (GENERIC has it; the
+ *     install ramdisk does not), hence the #ifdef -- the chain limit alone
+ *     still provides back-pressure there.
+ *
+ * The sleep is a plain timed retry: no wakeup plumbing, so nothing can be
+ * missed or lost, at the cost of up to a tick of latency per pass.
  */
 void
 hammer2_pfs_memory_wait(hammer2_pfs_t *pmp)
 {
-	uint32_t waiting;
-	int pcatch=0;
-	int error;
-	int started;
+	int i;
 
 	if (pmp == NULL || pmp->mp == NULL)
 		return;
 
-	started = 0;
-
-	for (;;) {
-		waiting = pmp->inmem_dirty_chains & HAMMER2_DIRTYCHAIN_MASK;
-		cpu_ccfence();
-
+	for (i = 0; i < HAMMER2_MEMORY_WAIT_MAX; ++i) {
+		if (hammer2_count_chain_modified <= hammer2_limit_dirty_chains
+#ifdef KMEMSTATS
+		    && kmemstats[M_HAMMER2].ks_memuse <=
+		       kmemstats[M_HAMMER2].ks_limit / 2
+#endif
+		    )
+			return;
 		/*
-		 * Start the syncer running at 1/2 the limit to try
-		 * to avoid sleeping.
+		 * Let the syncer drain.  tsleep() rather than a lock: we hold
+		 * no HAMMER2 locks here (called before trans_init/inode_lock),
+		 * so the flush is free to make progress while we wait.
 		 */
-		if (waiting > hammer2_limit_dirty_chains / 2 ||
-		    pmp->sideq_count > hammer2_limit_dirty_inodes / 2)
-		{
-			vfs_allocate_syncvnode(pmp->mp); //trigger_syncer(pmp->mp);
-		}
-
-		/*
-		 * Stall at the limit waiting for the counts to drop.
-		 * This code will typically be woken up once the count
-		 * drops below 3/4 the limit, or in one second.
-		 */
-		if (waiting < hammer2_limit_dirty_chains &&
-		    pmp->sideq_count < hammer2_limit_dirty_inodes)
-		{
-			break;
-		}
-
-		if (started == 0) {
-			//trigger_syncer_start(pmp->mp);
-			vfs_allocate_syncvnode(pmp->mp);
-			started = 1;
-		}
-
-		/*
-		 * Interlocked re-test, sleep, and retry.
-		 */
-		//pcatch = curthread->td_proc ? PCATCH : 0;
-		//tsleep_interlock(&pmp->inmem_dirty_chains, pcatch);
-
-		atomic_set_int(&pmp->inmem_dirty_chains,
-			       HAMMER2_DIRTYCHAIN_WAITING);
-
-		if (waiting < hammer2_limit_dirty_chains &&
-		    pmp->sideq_count < hammer2_limit_dirty_inodes) {
-			break;
-		}
-		error = tsleep(&pmp->inmem_dirty_chains,
-			       PINTERLOCKED | pcatch,
-			       "h2memw", hz);
-		if (error == ERESTART)
-			break;
+		tsleep(&hammer2_count_chain_modified, PRIBIO, "h2memw",
+		    hz / 10);
 	}
-	if (started) hprintf("fix me xxx");
-		//trigger_syncer_stop(pmp->mp);
+	/*
+	 * Give up rather than stall a write forever: the caller proceeding may
+	 * block in malloc(), but that is no worse than the pre-throttle
+	 * behaviour and keeps a pathological case from hanging a process
+	 * uninterruptibly.
+	 */
 }
 
 /*

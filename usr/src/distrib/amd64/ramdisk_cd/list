@@ -1,7 +1,7 @@
 #	$OpenBSD: list,v 1.6 2023/04/28 01:24:14 kevlo Exp $
 
 SRCDIRS distrib/special
-
+SRCDIRS sbin
 # copy the crunched binary, link to it, and kill it
 COPY	${OBJDIR}/instbin			instbin
 LINK	instbin					bin/arch
@@ -138,3 +138,12 @@ TZ
 # HAMMER2 install-target tools
 LINK   instbin                         sbin/newfs_hammer2
 LINK   instbin                         sbin/mount_hammer2
+
+# hammer2(8) itself: without it a rescue boot cannot inspect or repair a
+# HAMMER2 root (pfs-list, recover, bulkfree, ...), and mount_hammer2 could not
+# start the cluster service.  Needs libdmsg + libpthread, hence the LIBS line.
+LINK   instbin                         sbin/hammer2
+# crunchgen default is "-lstubs -lutil -lm -ltls -lssl -lcrypto -levent -lc -lz";
+# hammer2(8) additionally needs libdmsg (cluster/service commands) and pthreads.
+LIBS   -lstubs -lutil -lm -ldmsg -ltls -lssl -lcrypto -levent -lpthread -lc -lz
+LINK   instbin                         sbin/fsck_hammer2

@@ -757,6 +757,7 @@ struct hammer2_inode {
 	uint8_t			comp_heuristic;
 	int			ipdep_idx;
 	int			vhold;
+	struct vnode		*vhold_vp;	/* vnode vhold actually vref'd */
 	int			in_seek;	/* FIOSEEKXXX */
 	struct lockf_state	*ip_lockf;	/* byte-range advisory locks */
 };
@@ -1563,6 +1564,9 @@ extern int hammer2_count_inode_allocated;
 extern int hammer2_count_chain_allocated;
 extern int hammer2_cluster_enable;
 extern int hammer2_count_chain_modified;
+
+/* hammer2_pfs_memory_wait(): passes of hz/10 before giving up (~30s). */
+#define HAMMER2_MEMORY_WAIT_MAX	300
 extern int hammer2_count_dio_allocated;
 extern int hammer2_dio_limit;
 extern int hammer2_bulkfree_tps;
@@ -1820,6 +1824,7 @@ void hammer2_voldata_lock(hammer2_dev_t *);
 void hammer2_voldata_unlock(hammer2_dev_t *);
 void hammer2_voldata_modify(hammer2_dev_t *);
 int hammer2_vfs_enospace(hammer2_inode_t *, off_t, struct ucred *);
+void hammer2_pfs_memory_wait(hammer2_pfs_t *pmp);
 void hammer2_pfs_memory_inc(hammer2_pfs_t *pmp);
 void hammer2_pfs_memory_wakeup(hammer2_pfs_t *pmp, int count);
 

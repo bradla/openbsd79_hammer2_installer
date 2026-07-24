@@ -1413,6 +1413,17 @@ hammer2_inode_vhold(hammer2_inode_t *ip)
 		hammer2_mtx_ex(&ip->vhold_lock);
 		if (ip->vhold == 0) { /* optimization */
 			vref(ip->vp);
+			/*
+			 * Remember WHICH vnode was referenced.  ip->vp is not
+			 * stable: hammer2_vinit() swaps it for the aliased
+			 * vnode on VCHR/VBLK, and hammer2_reclaim() clears it
+			 * (revoke(2) on a tty force-reclaims even with refs
+			 * outstanding -- login/getty do exactly that on every
+			 * session).  Releasing ip->vp later would then drop a
+			 * reference this code never took, which panicked the
+			 * syncer with "vrele: bad ref count ... use 0".
+			 */
+			ip->vhold_vp = ip->vp;
 			ip->vhold++;
 		}
 		KKASSERT(ip->vhold > 0);
@@ -1429,17 +1440,20 @@ hammer2_inode_vdrop(hammer2_inode_t *ip, int n)
 {
 	KKASSERT(ip->refs > 0);
 	KKASSERT(ip->vhold >= 0);
-	KKASSERT(ip->vp);
 
 	if (n > ip->vhold)
 		hpanic("arg %d > vhold %d", n, ip->vhold);
 
 	hammer2_mtx_ex(&ip->vhold_lock);
+	/* Release the vnode vhold referenced, NOT ip->vp -- see vhold(). */
+	KKASSERT(ip->vhold == 0 || ip->vhold_vp);
 	while (n > 0) {
-		vrele(ip->vp);
+		vrele(ip->vhold_vp);
 		ip->vhold--;
 		n--;
 	}
+	if (ip->vhold == 0)
+		ip->vhold_vp = NULL;
 	KKASSERT(ip->vhold >= 0);
 	hammer2_mtx_unlock(&ip->vhold_lock);
 }

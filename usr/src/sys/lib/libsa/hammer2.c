@@ -292,17 +292,41 @@ h2_scan(struct open_file *f, struct h2_blockref *base, int n,
 			continue;
 
 		if (br->type == H2_BREF_TYPE_INDIRECT) {
-			void *ib = alloc(H2_PBUFSIZE);
-			size_t sz;
+			/*
+			 * Walk the indirect block's bref array in small chunks
+			 * instead of buffering the whole (up to 64KB) block:
+			 * recursion would otherwise hold depth x 64KB of libsa
+			 * heap, which overflows the ~640KB low-memory arena on
+			 * the deep radix trees of a large filesystem ("heap
+			 * full" loading /bsd).  Indirect blocks are never
+			 * compressed, so ranged raw reads are safe.
+			 */
+#define H2_SCANCHUNK	8192
+			uint64_t ioff = br->data_off & H2_OFF_MASK;
+			int iradix = (int)(br->data_off & H2_OFF_RADIX);
+			size_t isz, coff, csz;
+			void *ib;
 
+			if (iradix == 0)
+				return EIO;
+			isz = (size_t)1 << iradix;
+			ib = alloc(H2_SCANCHUNK);
 			if (ib == NULL)
 				return ENOMEM;
 			rc = 0;
-			if (h2_readphys(f, br, ib, H2_PBUFSIZE, &sz) == 0)
+			for (coff = 0; coff < isz && rc == 0;
+			    coff += H2_SCANCHUNK) {
+				csz = (isz - coff > H2_SCANCHUNK) ?
+				    H2_SCANCHUNK : isz - coff;
+				if (h2_pread(f, ib, ioff + coff, csz)) {
+					rc = EIO;
+					break;
+				}
 				rc = h2_scan(f, (struct h2_blockref *)ib,
-				    (int)(sz / H2_BLOCKREF_BYTES),
+				    (int)(csz / H2_BLOCKREF_BYTES),
 				    kbeg, kend, cb, arg);
-			free(ib, H2_PBUFSIZE);
+			}
+			free(ib, H2_SCANCHUNK);
 			if (rc)
 				return rc;
 		} else {
@@ -452,21 +476,6 @@ h2_mount(struct open_file *f, struct h2_file *fp)
 		if (cur == NULL) { rc = ENOMEM; goto out; }
 		h2_base = 0;
 
-		/* DEBUG (kept permanently): probe candidate byte offsets to show
-		 * where the volume header actually lands vs what dv_strategy gives. */
-		{
-			static const uint64_t probe[] = {
-			    0, 65536ULL, 1048576ULL, 2097152ULL };
-			int pi;
-			for (pi = 0; pi < 4; pi++) {
-				int r = h2_pread(f, cur, probe[pi], 1024);
-				printf("h2dbg off=%x rc=%d magic=%x:%x\n",
-				    (unsigned)probe[pi], r,
-				    (unsigned)(VOL_MAGIC(cur) >> 32),
-				    (unsigned)(VOL_MAGIC(cur) & 0xffffffff));
-			}
-		}
-
 		for (attempt = -1; attempt < 4 && !have; attempt++) {
 			if (attempt >= 0) {
 				/* MBR fallback: base on partition-table entry. */
@@ -498,9 +507,6 @@ h2_mount(struct open_file *f, struct h2_file *fp)
 				}
 			}
 		}
-		if (have)
-			printf("hammer2: volume header at base=%x\n",
-			    (unsigned)h2_base);
 		free(cur, H2_PBUFSIZE);
 	}
 	if (!have) {

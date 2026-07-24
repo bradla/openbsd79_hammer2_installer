@@ -9,22 +9,25 @@ SRCS=	cmd_bulkfree.c cmd_cleanup.c hammer2_compression.c cmd_debug.c \
 SRCS+=	cmd_service.c cmd_remote.c cmd_rsa.c cmd_info.c cmd_leaf.c
 MAN=	hammer2.8
 
-#.PATH:	../../sys/libkern ../../sys/hammer2 ../../sys/hammer2/xxhash
-.PATH:  ../../sys/lib/libkern  ../../sys/hammer2  ../../sys/hammer2/xxhash
+# ${.CURDIR}-prefixed: a bare relative path is resolved against the OBJ dir
+# once "make obj" has run, and the build dies on <hammer2/hammer2_disk.h>.
+.PATH:	${.CURDIR}/../../sys/lib/libkern ${.CURDIR}/../../sys/hammer2 \
+	${.CURDIR}/../../sys/hammer2/xxhash
 
 WARNS=	5
 
-CFLAGS+=	-I../../sys
-CFLAGS+=	-I../../lib/libdmsg	# <dmsg.h>
+CFLAGS+=	-I${.CURDIR}/../../sys
+CFLAGS+=	-I${.CURDIR}/../../lib/libdmsg	# <dmsg.h>
 CFLAGS+=	-DZLIB_CONST
 CFLAGS+=	-pthread
 
 # error: 'SHA256_xxx' is deprecated [-Werror,-Wdeprecated-declarations]
 CFLAGS+=	-Wno-deprecated-declarations
 
-# libdmsg (built in ../../lib/libdmsg) + its transitive deps
-LDADD+=		../../lib/libdmsg/libdmsg.a
-DPADD+=		../../lib/libdmsg/libdmsg.a
+# libdmsg is a base library now (lib/Makefile SUBDIR), so link it the normal
+# way: the in-tree path only resolved for a source-dir build, and pointed at a
+# file that "make obj" moves into lib/libdmsg/obj.
+LDADD+=		-ldmsg
 
 DPADD+=		${LIBCRYPTO}
 LDADD+=		-lcrypto

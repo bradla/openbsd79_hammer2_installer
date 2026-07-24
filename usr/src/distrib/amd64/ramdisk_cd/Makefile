@@ -1,7 +1,7 @@
 #	$OpenBSD: Makefile,v 1.40 2025/12/15 16:02:47 deraadt Exp $
 
 FS=		miniroot${OSrev}.img
-FSSIZE=		11392
+FSSIZE=		13312
 EFICDBOOT=	eficdboot
 EFICDBOOTSIZE=	350K
 CDROM=		cd${OSrev}.iso
@@ -55,10 +55,6 @@ ${CDROM}: bsd.rd ${EFICDBOOT}
 	cp ${DESTDIR}/usr/mdec/cdbr ${.OBJDIR}/cd-dir/${OSREV}/${MACHINE}
 	cp ${DESTDIR}/usr/mdec/cdboot ${.OBJDIR}/cd-dir/${OSREV}/${MACHINE}/cdboot
 	cp ${.OBJDIR}/${EFICDBOOT} ${.OBJDIR}/cd-dir/${OSREV}/${MACHINE}
-        cp /usr/rel/base78.tgz /usr/rel/comp78.tgz /usr/rel/game78.tgz \
-            /usr/rel/man78.tgz /usr/rel/site78.tgz /usr/rel/bsd.mp /usr/rel/bsd \
-            ${.OBJDIR}/cd-dir/
-        cp /home/install-hammer2.sh ${.OBJDIR}/cd-dir/install-hammer2.sh
 	mkhybrid -a -R -T -L -l -d -D -N -o ${.OBJDIR}/${CDROM} \
 	    -A "OpenBSD ${OSREV} ${MACHINE} bootonly CD" \
 	    -P "Copyright (c) `date +%Y` Theo de Raadt, The OpenBSD project" \
@@ -68,7 +64,69 @@ ${CDROM}: bsd.rd ${EFICDBOOT}
 	    -e ${OSREV}/${MACHINE}/${EFICDBOOT} \
 	    ${.OBJDIR}/cd-dir
 
-MRDISKTYPE=	rdrootb
+# Self-contained install CD: the bootonly cd-dir plus the release sets, so the
+# installer's "Location of sets? cd0" path serves them locally and no network
+# (or HTTP mirror) is needed -- which is what a HAMMER2 root install requires,
+# since the sets must be the ones built from this tree, not a public mirror.
+# Sets are taken from SETSDIR (defaults to RELEASEDIR); any that are missing
+# are skipped with a warning rather than failing the build.  bsd.rd is taken
+# from ${.OBJDIR}, so it is always the ramdisk just built here.
+#
+# The console is chosen here rather than inherited: ${CDROM} only rebuilds
+# cd-dir when the bootonly ISO is out of date, so a cd-dir left behind by a
+# serial repack would otherwise silently make this CD serial too (it did).
+# Default is the stock VGA boot.conf; CDSERIAL=com0 gives a serial CD.
+SETSDIR?=	${RELEASEDIR}
+CDSERIAL?=
+CDSPEED?=	115200
+CDROM_COMPLETE=	cd${OSrev}-complete.iso
+COMPLETE_SETS=	base${OSrev}.tgz comp${OSrev}.tgz man${OSrev}.tgz \
+		game${OSrev}.tgz xbase${OSrev}.tgz xfont${OSrev}.tgz \
+		xserv${OSrev}.tgz xshare${OSrev}.tgz \
+		bsd bsd.mp BUILDINFO SHA256 SHA256.sig INSTALL.${MACHINE}
+
+# Always rebuild: the console (CDSERIAL) and the set contents are build-time
+# parameters, and an up-to-date ISO would otherwise be silently reused.
+complete:
+	rm -f ${.OBJDIR}/${CDROM_COMPLETE}
+	cd ${.CURDIR} && ${MAKE} ${CDROM_COMPLETE}
+
+${CDROM_COMPLETE}: ${CDROM}
+	@if [ -z "${SETSDIR}" ]; then \
+		echo "SETSDIR (or RELEASEDIR) must be set"; exit 1; \
+	fi
+	@if [ ! -f ${SETSDIR}/base${OSrev}.tgz ]; then \
+		echo "no base${OSrev}.tgz in ${SETSDIR} -- run 'make release' first"; \
+		exit 1; \
+	fi
+	for f in ${COMPLETE_SETS}; do \
+		if [ -f ${SETSDIR}/$$f ]; then \
+			cp ${SETSDIR}/$$f \
+			    ${.OBJDIR}/cd-dir/${OSREV}/${MACHINE}/$$f; \
+		else \
+			echo "skipping missing $$f"; \
+		fi; \
+	done
+	cp ${.OBJDIR}/bsd.rd ${.OBJDIR}/cd-dir/${OSREV}/${MACHINE}/bsd.rd
+	@if [ -n "${CDSERIAL}" ]; then \
+		printf "stty ${CDSERIAL} ${CDSPEED}\nset tty ${CDSERIAL}\n" \
+		    > ${.OBJDIR}/cd-dir/etc/boot.conf; \
+	else \
+		:> ${.OBJDIR}/cd-dir/etc/boot.conf; \
+	fi
+	echo "set image /${OSREV}/${MACHINE}/bsd.rd" \
+	    >> ${.OBJDIR}/cd-dir/etc/boot.conf
+	cat ${.OBJDIR}/cd-dir/etc/boot.conf
+	mkhybrid -a -R -T -L -l -d -D -N -o ${.OBJDIR}/${CDROM_COMPLETE} \
+	    -A "OpenBSD ${OSREV} ${MACHINE} install CD" \
+	    -P "Copyright (c) `date +%Y` Theo de Raadt, The OpenBSD project" \
+	    -p "Theo de Raadt <deraadt@openbsd.org>" \
+	    -V "OpenBSD/${MACHINE}   ${OSREV} install CD" \
+	    -b ${OSREV}/${MACHINE}/cdbr -c ${OSREV}/${MACHINE}/boot.catalog \
+	    -e ${OSREV}/${MACHINE}/${EFICDBOOT} \
+	    ${.OBJDIR}/cd-dir
+
+MRDISKTYPE=	rdrooth2
 MRMAKEFSARGS=	-o disklabel=${MRDISKTYPE},minfree=0,density=4096
 
 bsd.gz: bsd.rd
@@ -123,7 +181,7 @@ clean cleandir:
 	    *.o *.lo *.c bsd bsd.rd bsd.gz bsd.strip floppy*.img \
 	    lib*.a lib*.olist instbin.map boot instbin.conf ${FS}
 	rm -rf mr.fs.d
-	rm -f ${CDROM} ${EFICDBOOT}
+	rm -f ${CDROM} ${CDROM_COMPLETE} ${EFICDBOOT}
 	rm -rf cd-dir eficdboot-dir
 
 .include <bsd.obj.mk>

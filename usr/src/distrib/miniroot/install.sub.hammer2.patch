@@ -1,0 +1,240 @@
+--- install.sub.orig	Tue Jul 21 16:24:19 2026
++++ install.sub	Wed Jul 22 18:32:05 2026
+@@ -440,12 +440,81 @@
+ # and autopartitioning during unattended install by asking for and downloading
+ # autopartitioning template. Write the resulting fstab to $2. Abort unattended
+ # installation if autopartitioning fails.
++# HAMMER2 support -----------------------------------------------------------
++# Ask which filesystem the root disk should use.  Offered only when the
++# ramdisk actually carries the tools (newfs_hammer2 + mount_hammer2), so a
++# stock ramdisk keeps the official ffs-only behaviour.
++ask_root_fstype() {
++	ROOTFSTYPE=ffs
++	[[ -x /sbin/newfs_hammer2 && -x /sbin/mount_hammer2 ]] || return 0
++	ask "Root filesystem type? (ffs or hammer2)" ffs
++	case $resp in
++	[hH]*)	ROOTFSTYPE=hammer2;;
++	*)	ROOTFSTYPE=ffs;;
++	esac
++}
++
++# HAMMER2 layout for the root disk $1; fstab fragment to $2.
++# BIOS biosboot(8) can only read FFS, so the proven 7.8 shape is used:
++#   a = small FFS boot partition (holds stage2 /boot + /etc/boot.conf)
++#   b = swap (RAM size, capped 8G)
++#   d = rest of the disk, HAMMER2 root (PFS subvolumes instead of e/f/g...)
++# disklabel -F knows nothing about hammer2, so the fragment (with the @ROOT
++# PFS label mount syntax) is written here directly.
++hammer2_autolayout() {
++	local _disk=$1 _f=$2 _swap
++
++	# The ramdisk sysctl (distrib/special) does not know hw.physmem and
++	# prints nothing on stdout, which must never reach the arithmetic below
++	# (empty operand -> "unexpected '/'" -> autolayout aborts -> disk loop).
++	# Fall back to dmesg "real mem = N"; the 64M floor covers the rest.
++	_swap=$(sysctl -n hw.physmem 2>/dev/null)
++	[[ $_swap == +([0-9]) ]] || _swap=$(dmesg 2>/dev/null |
++	    sed -n 's/^real mem *= *\([0-9]*\).*/\1/p' | sed -n '$p')
++	[[ $_swap == +([0-9]) ]] || _swap=0
++	_swap=$((_swap / 1048576))
++	[[ $_swap -gt 8192 ]] && _swap=8192
++	[[ $_swap -lt 64 ]] && _swap=64
++
++	disklabel -E $_disk >/dev/null 2>&1 <<-__EOT
++		z
++		a a
++
++		64M
++		4.2BSD
++		a b
++
++		${_swap}M
++		swap
++		a d
++
++		*
++		HAMMER2
++		w
++		q
++	__EOT
++
++	# passno 0 for the hammer2 root: /etc/rc runs 'fsck -p', which would
++	# hand fsck_hammer2 the raw form of the mount device -- /dev/rwd0d@ROOT,
++	# not a device node -- so it exits "open: No such file or directory"
++	# and rc drops to single user.  (fsck_hammer2 does accept -p; teaching
++	# it to strip @LABEL is the other half of the fix, in the tool.)
++	echo "/dev/${_disk}d@ROOT / hammer2 rw 0 0" >$_f
++	echo "/dev/${_disk}a /boot ffs rw 1 2" >>$_f
++}
++
+ disklabel_autolayout() {
+ 	local _disk=$1 _f=$2 _dl=/tmp/i/disklabel.auto _op _qst
+ 
+ 	# Skip disklabel auto-layout for any disk except the root disk.
+ 	[[ $_disk != $ROOTDISK ]] && return
+ 
++	# HAMMER2 root: single-partition layout instead of the FFS auto-layout.
++	if [[ $ROOTFSTYPE == hammer2 ]]; then
++		hammer2_autolayout $_disk $_f
++		return
++	fi
++
+ 	while $AI; do
+ 		ask "URL to autopartitioning template for disklabel?" none
+ 		[[ $resp == none ]] && break
+@@ -479,10 +548,13 @@
+ 
+ # Create a partition table and configure the partition layout for disk $1.
+ configure_disk() {
+-	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt
++	local _disk=$1 _fstab=/tmp/i/fstab.$1 _opt _rdev _lbl
+ 
+ 	make_dev $_disk || return
+ 
++	# Choose the root filesystem type before the disklabel step.
++	[[ $_disk == $ROOTDISK ]] && ask_root_fstype
++
+ 	# Deal with disklabels, including editing the root disklabel
+ 	# and labeling additional disks. This is machine-dependent since
+ 	# some platforms may not be able to provide this functionality.
+@@ -491,7 +563,8 @@
+ 	md_prep_disklabel $_disk || return
+ 
+ 	# Make sure a '/' mount point exists on the root disk.
+-	if ! grep -qs ' / ffs ' /tmp/i/fstab.$ROOTDISK; then
++	# NB: grep -E -- OpenBSD BRE does not support \| alternation.
++	if ! grep -qsE ' / (ffs|hammer2) ' /tmp/i/fstab.$ROOTDISK; then
+ 		echo "'/' must be configured!"
+ 		$AI && exit 1 || return 1
+ 	fi
+@@ -524,9 +597,18 @@
+ 			$AI && exit 1 || return 1
+ 		fi
+ 
+-		# Add ffs filesystems to list after newfs'ing them. Ignore
+-		# other filesystems.
++		# Add ffs and hammer2 filesystems to list after newfs'ing
++		# them. Ignore other filesystems.
+ 		while read _pp _mp _fstype _rest; do
++			if [[ $_fstype == hammer2 ]]; then
++				# /dev/sd0a@LABEL -> raw device + PFS label.
++				_rdev=${_pp%@*}
++				_lbl=${_pp##*@}
++				[[ $_lbl == $_pp ]] && _lbl=ROOT
++				newfs_hammer2 -L $_lbl $_rdev
++				FSENT="$FSENT $_mp!$_pp!$_fstype"
++				continue
++			fi
+ 			[[ $_fstype == ffs ]] || continue
+ 
+ 			# Default to FFS2 unless otherwise directed.
+@@ -537,9 +619,22 @@
+ 			fi
+ 			newfs -q $_opt ${_pp##/dev/}
+ 
++			# HAMMER2 root: prime the FFS boot partition with a
++			# boot.conf so stage2 (hammer2-capable) chains to the
++			# root partition.  TODO: hd0d assumes BIOS disk 0.
++			if [[ $ROOTFSTYPE == hammer2 && $_mp == /boot ]]; then
++				mkdir -p /tmp/i/bootfs
++				if mount -t ffs $_pp /tmp/i/bootfs 2>/dev/null; then
++					mkdir -p /tmp/i/bootfs/etc
++					echo "boot hd0d:/bsd" \
++					    >/tmp/i/bootfs/etc/boot.conf
++					umount /tmp/i/bootfs
++				fi
++			fi
++
+ 			# N.B.: '!' is lexically < '/'.
+ 			# That is required for correct sorting of mount points.
+-			FSENT="$FSENT $_mp!$_pp"
++			FSENT="$FSENT $_mp!$_pp!$_fstype"
+ 		done <$_fstab
+ 	fi
+ 
+@@ -2715,7 +2810,7 @@
+ 			$_opt == *noauto* ||
+ 			$_opt == *xx* ]] && continue
+ 
+-		[[ $_fstype == ffs ]] && _mode=rw || _mode=ro
++		[[ $_fstype == @(ffs|hammer2) ]] && _mode=rw || _mode=ro
+ 		_opt=$(echo $_opt | sed "s,[[:<:]]r[wo][[:>:]],${_mode},")
+ 
+ 		echo $_dev /mnt${_mp%/} $_fstype $_opt $_rest
+@@ -2759,15 +2854,20 @@
+ # Must mount filesystems manually, one at a time, so we can make sure the mount
+ # points exist.
+ mount_fs() {
+-	local _async=$1 _dev _mp _fstype _opt _rest _msg _fail
++	local _async=$1 _dev _mp _fstype _opt _rest _msg _fail _aopt
+ 
+ 	while read _dev _mp _fstype _opt _rest; do
+ 		# If not the root filesystem, make sure the mount
+ 		# point is present.
+ 		[[ $_mp == /mnt ]] || mkdir -p $_mp
+ 
++		# The async mount option is ffs-only; mount_hammer2 (and other
++		# non-ffs helpers) reject it.
++		_aopt=$_async
++		[[ $_fstype == ffs ]] || _aopt=
++
+ 		# Mount the filesystem. Remember any failure.
+-		_msg=$(mount -v -t $_fstype $_async -o $_opt $_dev $_mp) ||
++		_msg=$(mount -v -t $_fstype $_aopt -o $_opt $_dev $_mp) ||
+ 			_fail="$_fail\n$_mp ($_dev)"
+ 		echo $_msg | sed 's/, ctime=[^,)]*//'
+ 	done </etc/fstab
+@@ -2895,6 +2995,17 @@
+ 		[[ -n $CPROM ]] &&
+ 			echo "stty $CPROM $CSPEED\nset tty $CPROM" \
+ 				>>/mnt/etc/boot.conf
++		# HAMMER2 root: stage2 is loaded from the FFS /boot partition
++		# and reads ITS /etc/boot.conf -- the one on the hammer2 root
++		# is never looked at.  Rewrite it with the console lines AHEAD
++		# of the chain-load command ('boot' ends boot.conf parsing).
++		if [[ $ROOTFSTYPE == hammer2 && -d /mnt/boot/etc ]]; then
++			rm -f /mnt/boot/etc/boot.conf
++			[[ -n $CPROM ]] &&
++				echo "stty $CPROM $CSPEED\nset tty $CPROM" \
++					>>/mnt/boot/etc/boot.conf
++			echo "boot hd0d:/bsd" >>/mnt/boot/etc/boot.conf
++		fi
+ 	fi
+ 
+ 	ln -sf /usr/share/zoneinfo/$TZ /mnt/etc/localtime
+@@ -3255,13 +3366,24 @@
+ 	# Write fstab entries to fstab in mount point alphabetic order
+ 	# to enforce a rational mount order.
+ 	for _mp in $(bsort $FSENT); do
++		_fstype=${_mp##*!}
++		_mp=${_mp%!*}
+ 		_pp=${_mp##*!}
+ 		_mp=${_mp%!*}
+-		echo -n "$_pp $_mp ffs rw"
++		echo -n "$_pp $_mp $_fstype rw"
+ 
+ 		# Only '/' is neither nodev nor nosuid. i.e. it can obviously
+ 		# *always* contain devices or setuid programs.
+-		[[ $_mp == / ]] && { echo " 1 1"; continue; }
++		# HAMMER2: passno 0 -- /etc/rc runs 'fsck -p', which hands
++		# fsck_hammer2 the RAW form of the mount device
++		# (/dev/rwd0d@ROOT), which is not a device node: it exits
++		# "open: No such file or directory" and rc drops to single
++		# user.  Skipping the boot-time check matches the proven 7.8
++		# install.  (Revisit once fsck_hammer2 strips @LABEL.)
++		if [[ $_mp == / ]]; then
++			[[ $_fstype == hammer2 ]] && echo " 0 0" || echo " 1 1"
++			continue
++		fi
+ 
+ 		# Every other mounted filesystem is nodev. If the user chooses
+ 		# to mount /dev as a separate filesystem, then on the user's
+@@ -3293,7 +3415,7 @@
+ 		/usr/X11R6|/usr/X11R6/bin)	;;
+ 		*)	echo -n ",nosuid"	;;
+ 		esac
+-		echo " 1 2"
++		[[ $_fstype == hammer2 ]] && echo " 0 0" || echo " 1 2"
+ 	done >>/tmp/i/fstab
+ 
+ 	# Create a skeletal /etc/fstab which is usable for the installation

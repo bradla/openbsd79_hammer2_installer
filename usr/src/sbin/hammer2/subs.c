@@ -338,7 +338,20 @@ check_volume(int fd)
 		 * can be as small as HAMMER2_LOGSIZE (16KB).
 		 */
 		int media_blksize = dl.d_secsize;
-		size = (hammer2_off_t)dl.d_secperunit * media_blksize;
+		/*
+		 * OpenBSD DIOCGDINFO returns the whole-disk label.  Size THIS
+		 * partition (fd minor -> partition), not the entire disk, or
+		 * the end-of-volume probe write in newfs runs past the
+		 * partition and fails with EINVAL.
+		 */
+		if (fstat(fd, &st) == 0 &&
+		    (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode)) &&
+		    DISKPART(st.st_rdev) != RAW_PART)
+			size = (hammer2_off_t)
+			    dl.d_partitions[DISKPART(st.st_rdev)].p_size *
+			    media_blksize;
+		else
+			size = (hammer2_off_t)dl.d_secperunit * media_blksize;
 		if (media_blksize > HAMMER2_PBUFSIZE ||
 		    HAMMER2_PBUFSIZE % media_blksize) {
 			errx(1, "A media sector size of %d is not supported",

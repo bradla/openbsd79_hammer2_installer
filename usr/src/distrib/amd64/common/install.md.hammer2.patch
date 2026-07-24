@@ -1,0 +1,22 @@
+--- install.md.stock	2026-07-21 16:35:25.169087917 -0700
++++ install.md	2026-07-21 16:35:50.711595014 -0700
+@@ -41,6 +41,19 @@
+     $DMESGBOOT && MDEFI=y
+ 
+ md_installboot() {
++	# HAMMER2 root: bootblocks and stage2 live on the small FFS boot
++	# partition ('a', mounted /boot); stage files come from the hammer2
++	# root's /usr/mdec.  Stage2 (with the hammer2 libsa driver) then
++	# chains to /bsd on the root via /boot/etc/boot.conf.
++	if [[ $ROOTFSTYPE == hammer2 ]]; then
++		if ! installboot -cr /mnt/boot ${1} \
++		    /mnt/usr/mdec/biosboot /mnt/usr/mdec/boot; then
++			echo "\nFailed to install bootblocks."
++			echo "You will not be able to boot OpenBSD from ${1}."
++			exit
++		fi
++		return
++	fi
+ 	if ! installboot -cr /mnt ${1}; then
+ 		echo "\nFailed to install bootblocks."
+ 		echo "You will not be able to boot OpenBSD from ${1}."

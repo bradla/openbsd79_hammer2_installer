@@ -946,6 +946,13 @@ hammer2_write(void *v)
 	}
 
 	/*
+	 * Back-pressure BEFORE taking any HAMMER2 lock or starting the
+	 * transaction: without this a big write load runs the M_HAMMER2
+	 * malloc budget to its ceiling and wedges the filesystem for good.
+	 */
+	hammer2_pfs_memory_wait(ip->pmp);
+
+	/*
 	 * The transaction interlocks against flush initiations
 	 * (note: but will run concurrently with the actual flush).
 	 *
