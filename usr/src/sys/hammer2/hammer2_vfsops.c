@@ -219,6 +219,36 @@ hammer2_init(struct vfsconf *vfsp)
 	if (hammer2_limit_dirty_inodes > HAMMER2_LIMIT_DIRTY_INODES)
 		hammer2_limit_dirty_inodes = HAMMER2_LIMIT_DIRTY_INODES;
 
+#ifdef KMEMSTATS
+	/*
+	 * Remove HAMMER2's per-malloc-type sub-ceiling.
+	 *
+	 * OpenBSD malloc(9) caps every type at ~60% of the kmem arena.  HAMMER2
+	 * -- which in DragonFly has no such per-type cap and self-manages memory
+	 * via the dirty/saved-chain limits plus vnode reclaim -- legitimately
+	 * needs more than that transiently: the post-install KARL relink drives
+	 * cached chains and the strategy read buffers past the cap.  Once
+	 * M_HAMMER2 sits at ks_limit, a must-succeed malloc(M_WAITOK) on the
+	 * read/strategy path (hammer2_xop_fifo_alloc, run while holding the vnode
+	 * lock) sleeps INFSLP forever in kern_malloc.c -- a hard deadlock the
+	 * frontend write throttle (hammer2_pfs_memory_wait, write path only)
+	 * cannot reach, and which then wedges every namei waiting on that vnode
+	 * lock.  pool(9) is no escape either (see the strategy-buffer note where
+	 * hammer2_pool_xops is set up: pool_get() blocks and never returns for
+	 * these).  Diagnosed live in ddb: M_HAMMER2 MemUse==Limit (~186M on 4G),
+	 * ld's relink thread parked in malloc via hammer2_strategy; reproducible
+	 * on VirtualBox, timing-hidden on qemu.
+	 *
+	 * Raise the ceiling to physical memory so the per-type check is inert;
+	 * real usage stays bounded by the kmem arena itself, by
+	 * hammer2_pfs_memory_wait() on writes, and by vnode/inode reclaim on
+	 * reads.  Done once here at vfs init, before any mount allocates
+	 * M_HAMMER2, so malloc(9)'s lazy default never overwrites it and it
+	 * persists for the life of the filesystem.
+	 */
+	kmemstats[M_HAMMER2].ks_limit = (long)physmem << PAGE_SHIFT;
+#endif
+
 	return (0);
 }
 
