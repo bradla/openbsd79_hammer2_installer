@@ -1,4 +1,4 @@
-[Hammer2 OBSD Website](http://openbsd.sc00ped.com "")
+[Hammer2 OBSD Website](https://www.sc00ped.com/s/openbsd/ "")
 
 # HAMMER2 on OpenBSD — Disk Setup
 
