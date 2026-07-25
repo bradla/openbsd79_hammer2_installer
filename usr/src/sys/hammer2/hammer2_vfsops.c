@@ -1361,7 +1361,19 @@ hammer2_unmount(struct mount *mp, int mntflags, struct proc *p)
 	if (pmp->iroot) {
 		error = vflush(mp, NULLVP, flags);
 		if (error) {
-			hprintf("vflush failed %d\n", error);
+			struct vnode *dvp;
+			int nbusy = 0;
+			hprintf("vflush failed %d -- dumping busy vnodes:\n", error);
+			TAILQ_FOREACH(dvp, &mp->mnt_vnodelist, v_mntvnodes) {
+				if (dvp->v_usecount == 0)
+					continue;
+				nbusy++;
+				hprintf("  BUSYVN vp=%p use=%d hold=%d type=%d "
+				    "tag=%d data=%p\n", dvp, dvp->v_usecount,
+				    dvp->v_holdcnt, (int)dvp->v_type,
+				    (int)dvp->v_tag, dvp->v_data);
+			}
+			hprintf("  BUSYVN total=%d\n", nbusy);
 			goto failed;
 		}
 		hammer2_sync(mp, MNT_WAIT, 0, NULL, NULL);
