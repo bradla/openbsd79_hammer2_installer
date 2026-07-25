@@ -637,7 +637,19 @@ configure_disk() {
 						for _lbl in $_extra; do
 							hammer2 -s /tmp/i/h2mnt pfs-create $_lbl
 						done
-						umount /tmp/i/h2mnt
+						# pfs-create briefly leaves a vnode ref on this
+						# mount (released asynchronously), so an immediate
+						# umount can fail EBUSY on real hardware, leaving
+						# @ROOT mounted here and failing the later mount at
+						# /mnt.  Retry until the ref clears.  (Intermittent;
+						# qemu never reproduced it, VBox does ~half the time.)
+						sync
+						_n=0
+						while ! umount /tmp/i/h2mnt 2>/dev/null; do
+							_n=$(($_n + 1))
+							[[ $_n -ge 15 ]] && break
+							sleep 1
+						done
 					fi
 					_h2done="$_h2done $_rdev"
 				fi

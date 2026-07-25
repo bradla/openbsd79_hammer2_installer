@@ -158,6 +158,17 @@ hammer2_close_devvp(const hammer2_devvp_list_t *devvpl, struct proc *runp)
 			if (devvp->v_type != VBAD)
 				devvp->v_specmountpoint = NULL;
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+			/*
+			 * Flush and invalidate the device's cached buffers
+			 * before closing, exactly as ffs_unmount() does.  The
+			 * hammer2 dio layer brelse()s its struct bufs back onto
+			 * this device vnode; without invalidating them here they
+			 * linger past VOP_CLOSE and keep the block device busy,
+			 * so a subsequent remount of the same device (or
+			 * vnconfig -u) fails or wedges on real hardware.  QEMU's
+			 * timing happened to clear them, masking the leak.
+			 */
+			(void)vinvalbuf(devvp, V_SAVE, cred, runp, 0, INFSLP);
 			(void)VOP_CLOSE(devvp, e->xflags, cred, runp);
 			vput(devvp);
 
