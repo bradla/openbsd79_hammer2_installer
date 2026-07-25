@@ -632,23 +632,18 @@ configure_disk() {
 					done <$_fstab
 					newfs_hammer2 $_Largs $_rdev
 					if [[ -n $_extra ]]; then
-						mkdir -p /tmp/i/h2mnt
-						mount_hammer2 ${_rdev}@ROOT /tmp/i/h2mnt
+# Create the overflow PFSes (beyond newfs's 3-label
+						# cap) WITHOUT ever unmounting @ROOT: unmounting then
+						# remounting the same device trips an intermittent
+						# vnode-lifecycle race in the port (the temp mount is
+						# left un-releasable, EBUSY).  Instead mount @ROOT at
+						# its REAL mountpoint /mnt right here, create the
+						# extra PFSes through it, and leave it mounted.
+						# mount_fs() skips already-mounted filesystems, so
+						# @ROOT is mounted exactly once for the whole install.
+						mount_hammer2 ${_rdev}@ROOT /mnt
 						for _lbl in $_extra; do
-							hammer2 -s /tmp/i/h2mnt pfs-create $_lbl
-						done
-						# pfs-create briefly leaves a vnode ref on this
-						# mount (released asynchronously), so an immediate
-						# umount can fail EBUSY on real hardware, leaving
-						# @ROOT mounted here and failing the later mount at
-						# /mnt.  Retry until the ref clears.  (Intermittent;
-						# qemu never reproduced it, VBox does ~half the time.)
-						sync
-						_n=0
-						while ! umount /tmp/i/h2mnt 2>/dev/null; do
-							_n=$(($_n + 1))
-							[[ $_n -ge 15 ]] && break
-							sleep 1
+							hammer2 -s /mnt pfs-create $_lbl
 						done
 					fi
 					_h2done="$_h2done $_rdev"
@@ -2911,6 +2906,12 @@ mount_fs() {
 		# If not the root filesystem, make sure the mount
 		# point is present.
 		[[ $_mp == /mnt ]] || mkdir -p $_mp
+
+		# Skip filesystems already mounted: the HAMMER2 root is
+		# pre-mounted in configure_disk (so its overflow PFSes can be
+		# created without an unmount/remount of the same device, which
+		# trips a vnode-lifecycle race in the port).
+		mount | grep -q " on $_mp type " && continue
 
 		# The async mount option is ffs-only; mount_hammer2 (and other
 		# non-ffs helpers) reject it.
