@@ -1,3 +1,5 @@
+[Hammer2 OBSD Website](http://openbsd.sc00ped.com "")
+
 # HAMMER2 on OpenBSD — Disk Setup
 
 > ** CRITICAL: partition offset**
