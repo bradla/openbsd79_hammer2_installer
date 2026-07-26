@@ -2285,12 +2285,19 @@ hammer2_pfs_memory_wait(hammer2_pfs_t *pmp)
 		    )
 			return;
 		/*
-		 * Let the syncer drain.  tsleep() rather than a lock: we hold
-		 * no HAMMER2 locks here (called before trans_init/inode_lock),
-		 * so the flush is free to make progress while we wait.
+		 * Drive the flush ourselves rather than waiting up to ~30s for
+		 * the periodic filesystem syncer to run.  We hold no HAMMER2
+		 * locks here (called before trans_init/inode_lock) and this is
+		 * always a frontend writer (never a backend/syncer thread), so
+		 * running the flush transaction here is safe: concurrent
+		 * throttled writers serialize on the ISFLUSH transaction rather
+		 * than deadlock.  This turns a multi-second per-throttle stall
+		 * (waiting for the next periodic sync) into a flush-at-disk-
+		 * speed drain, then a short pause before re-checking.
 		 */
+		hammer2_vfs_sync_pmp(pmp, MNT_NOWAIT);
 		tsleep(&hammer2_count_chain_modified, PRIBIO, "h2memw",
-		    hz / 10);
+		    hz / 50);
 	}
 	/*
 	 * Give up rather than stall a write forever: the caller proceeding may

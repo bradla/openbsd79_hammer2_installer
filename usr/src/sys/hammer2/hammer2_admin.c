@@ -613,9 +613,20 @@ hammer2_xop_start_except(hammer2_xop_head_t *xop, hammer2_xop_desc_t *desc,
 
 	xop->desc = desc;
 
-	if (desc == &hammer2_strategy_write_desc)
-		xop->scratch = hmalloc(hammer2_get_logical(), M_HAMMER2,
-		    M_WAITOK | M_ZERO);
+	/*
+	 * Do NOT allocate a per-XOP scratch buffer here.  The backend worker
+	 * thread runs every storage_func (including hammer2_xop_strategy_write)
+	 * with thr->scratch (see hammer2_primary_xops_thread: storage_func is
+	 * called with thr->scratch, thr->clindex), and strategy_write uses that
+	 * passed-in buffer as bio_data -- xop->scratch was written here and freed
+	 * at retire but never read by anything.  Under sustained buffered writes
+	 * buf_daemon flushes thousands of strategy-write XOPs concurrently, and a
+	 * dead 64KB (hammer2_get_logical()) M_WAITOK malloc per XOP exhausted the
+	 * kernel kmem_map ("panic: malloc: out of space in kmem_map" via
+	 * hammer2_xop_start_except -> hammer2_strategy -> buf_daemon).  thr->scratch
+	 * is MAXPHYS and bounded by the small worker-thread count, so the real
+	 * write path needs no per-XOP allocation.
+	 */
 
 	/*
 	 * Select a worker group.  Hash by inode so all operations on the same
@@ -845,8 +856,7 @@ hammer2_xop_retire(hammer2_xop_head_t *xop, uint64_t mask)
 		hfree(fifo->errors, M_HAMMER2, xop->fifo_size * sizeof(int));
 	}
 
-	if (xop->scratch)
-		hfree(xop->scratch, M_HAMMER2, hammer2_get_logical());
+	/* xop->scratch is no longer allocated (see hammer2_xop_start_except). */
 
 	pool_put(&hammer2_pool_xops, xop);
 }

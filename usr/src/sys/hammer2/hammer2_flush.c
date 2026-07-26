@@ -1128,7 +1128,7 @@ hammer2_xop_inode_flush(hammer2_xop_t *arg, void *scratch, int clindex)
 	struct vnode *devvp;
 	struct buf *bp;
 	int flush_error = 0, fsync_error = 0, total_error = 0, vol_error = 0;
-	int j, xflags, force, ispfsroot = 0;
+	int j, xflags, force, ispfsroot = 0, s;
 	daddr_t blkno;
 
 	xflags = HAMMER2_FLUSH_TOP;
@@ -1269,7 +1269,29 @@ hammer2_xop_inode_flush(hammer2_xop_t *arg, void *scratch, int clindex)
 		devvp = e->devvp;
 		KKASSERT(devvp);
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		fsync_error = VOP_FSYNC(devvp, FSCRED, MNT_WAIT, curproc);
+		/*
+		 * Do NOT use VOP_FSYNC(devvp, MNT_WAIT) here.  On an OpenBSD
+		 * hammer2-root the volume's own device node lives on hammer2,
+		 * so devvp is a VT_HAMMER2 block-device vnode and its fsync is
+		 * spec_fsync().  spec_fsync(MNT_WAIT) loops until v_dirtyblkhd
+		 * is *empty*; under sustained write load concurrent
+		 * hammer2_strategy_write()s keep re-dirtying devvp, so that
+		 * list never empties and spec_fsync livelocks -- flooding the
+		 * console with "spec_fsync: dirty ... VBIOONSYNCLIST" and
+		 * wedging the flush (and every throttled writer behind it).
+		 *
+		 * For volume-header ordering we only need the buffers already
+		 * issued by this flush transaction to reach stable storage, not
+		 * an empty device dirty list.  MNT_NOWAIT runs spec_fsync's
+		 * bawrite pass (issues every currently-dirty, non-busy buffer)
+		 * without the empty-list re-loop; vwaitforio() then drains the
+		 * outstanding I/O.  This is bounded by disk speed and cannot
+		 * livelock on buffers a racing writer adds afterwards.
+		 */
+		fsync_error = VOP_FSYNC(devvp, FSCRED, MNT_NOWAIT, curproc);
+		s = splbio();
+		vwaitforio(devvp, 0, "h2vsync", INFSLP);
+		splx(s);
 		VOP_UNLOCK(devvp);
 		if (fsync_error || flush_error)
 			hprintf("fsync_error %d flush_error 0x%04x "
