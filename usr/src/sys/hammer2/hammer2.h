@@ -297,7 +297,6 @@ struct hammer2_io {
 #endif
 	uint64_t	dedup_valid;	/* valid for dedup operation */
 	uint64_t	dedup_alloc;	/* allocated / de-dupable */
-	void		*dbg_ra;	/* DEBUG: return addr of creator */
 #ifdef HAMMER2_IO_DEBUG
 	const char	*debug_file[HAMMER2_IO_DEBUG_COUNT];
 	void		*debug_td[HAMMER2_IO_DEBUG_COUNT];
@@ -1570,9 +1569,6 @@ extern int hammer2_count_chain_modified;
 /* hammer2_pfs_memory_wait(): passes of hz/10 before giving up (~30s). */
 #define HAMMER2_MEMORY_WAIT_MAX	300
 extern int hammer2_count_dio_allocated;
-extern int hammer2_dio_by_type[16];	/* DEBUG */
-extern void *hammer2_dbg_last_ra;	/* DEBUG */
-extern int hammer2_dio_trace;		/* DEBUG */
 extern int hammer2_dio_limit;
 extern int hammer2_bulkfree_tps;
 extern int hammer2_spread_workers;

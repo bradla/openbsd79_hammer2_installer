@@ -79,9 +79,6 @@ int hammer2_count_chain_allocated;
 int hammer2_cluster_enable = 1;		/* master/slave sync engine (DragonFly-faithful: on; vfs.hammer2.cluster_enable) */
 int hammer2_count_chain_modified;
 int hammer2_count_dio_allocated;
-int hammer2_dio_by_type[16];	/* DEBUG: net dio allocations per bref type */
-void *hammer2_dbg_last_ra;	/* DEBUG: creator RA stashed by io_new/newnz */
-int hammer2_dio_trace;		/* DEBUG: gate for per-op h2t DATA dio trace */
 int hammer2_dio_limit = 256;
 int hammer2_bulkfree_tps = 5000;
 int hammer2_limit_scan_depth;
@@ -124,7 +121,6 @@ static const struct sysctl_bounded_args hammer2_vars[] = {
 	{ HAMMER2CTL_LIMIT_SAVED_CHAINS, &hammer2_limit_saved_chains, 0, INT_MAX, },
 	{ HAMMER2CTL_ALWAYS_COMPRESS, &hammer2_always_compress, 0, INT_MAX, },
 	{ HAMMER2CTL_CLUSTER_ENABLE, &hammer2_cluster_enable, 0, 1, },
-	{ HAMMER2CTL_DIO_TRACE, &hammer2_dio_trace, 0, 1, }, /* DEBUG */
 };
 
 static unsigned long
@@ -2116,9 +2112,8 @@ restart:
 		 * update the parent.
 		 */
 		if (ip->flags & HAMMER2_INODE_DELETING) {
-			if (hammer2_dio_trace)
-				printf("h2del SYNCQ destroy inum=%016llx\n",
-				    (long long)ip->meta.inum);
+			debug_hprintf("inum %016llx destroy\n",
+			    (long long)ip->meta.inum);
 			hammer2_inode_chain_des(ip);
 		} else if (ip->flags & HAMMER2_INODE_CREATING) {
 			debug_hprintf("inum %016llx insert\n",

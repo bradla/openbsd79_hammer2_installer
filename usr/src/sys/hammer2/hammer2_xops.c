@@ -1186,12 +1186,6 @@ hammer2_xop_inode_destroy(hammer2_xop_t *arg, void *scratch, int clindex)
 	KKASSERT(chain->parent == parent);
 
 	/* We have the correct parent, we can issue the deletion. */
-	if (hammer2_dio_trace)
-		printf("h2del destroyXOP inum=%016llx ptype=%d pblkmapped=%d "
-		    "creating=%d\n", (long long)ip->meta.inum,
-		    parent ? parent->bref.type : -1,
-		    !!(chain->flags & HAMMER2_CHAIN_BLKMAPPED),
-		    !!(ip->flags & HAMMER2_INODE_CREATING));
 	hammer2_chain_delete(parent, chain, xop->head.mtid, 0);
 	error = 0;
 done:
