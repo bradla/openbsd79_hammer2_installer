@@ -1253,6 +1253,64 @@ hammer2_primary_xops_thread(void *arg)
 }
 
 /*
+ * Dedicated per-pmp dirty-chain flush thread.
+ *
+ * The write throttle (hammer2_pfs_memory_wait) wakes this thread instead of
+ * running hammer2_vfs_sync_pmp() itself.  A *frontend* writer running the flush
+ * deadlocks under concurrent writers: it holds the single ISFLUSH transaction
+ * while the other throttled writers block in hammer2_trans_init() ("h2pmp_tr")
+ * waiting for it, and it in turn waits for them in the flush's restart loop
+ * ("h2syndel").  (Proven in ddb: two dd's stuck in hammer2_pfs_memory_wait ->
+ * hammer2_vfs_sync_pmp, one holding ISFLUSH, the other parked in trans_init.)
+ *
+ * By funneling all throttle-driven flushing through this one thread, frontend
+ * writers never enter the flush and never contend for the transaction -- they
+ * simply park on "h2memw" until the chains drain.  This is the same "single
+ * flusher" model the OpenBSD syncer already relies on.
+ */
+void
+hammer2_primary_flush_thread(void *arg)
+{
+	hammer2_thread_t *thr = arg;
+	hammer2_pfs_t *pmp = thr->pmp;
+	uint32_t flags, nflags;
+
+	for (;;) {
+		flags = thr->flags;
+		cpu_ccfence();
+
+		if (flags & HAMMER2_THREAD_STOP)
+			break;
+
+		if (flags & HAMMER2_THREAD_XOPQ) {
+			/*
+			 * Consume the work-pending flag before flushing so a
+			 * wake that races the flush is not lost (we re-check).
+			 */
+			nflags = flags & ~HAMMER2_THREAD_XOPQ;
+			if (!atomic_cmpset_int(&thr->flags, flags, nflags))
+				continue;
+			if (pmp->mp != NULL)
+				hammer2_vfs_sync_pmp(pmp, MNT_NOWAIT);
+			/* Wake throttled writers now that chains have drained. */
+			wakeup(&hammer2_count_chain_modified);
+			continue;
+		}
+
+		/* Idle until the throttle signals work (1s backstop poll). */
+		nflags = flags | HAMMER2_THREAD_WAITING;
+		tsleep_interlock(&thr->flags, 0);
+		if (atomic_cmpset_int(&thr->flags, flags, nflags))
+			tsleep(&thr->flags, PINTERLOCKED, "h2flsh", hz);
+	}
+
+	thr->td = NULL;
+	hammer2_thr_signal(thr, HAMMER2_THREAD_STOPPED);
+	/* thr may be invalid after this point. */
+	kthread_exit(0);
+}
+
+/*
  * Create the per-node xop helper threads for a pmp.  Idempotent.  Callers
  * are serialized by the mount lock (hammer2_mntlk).
  */
@@ -1280,6 +1338,11 @@ hammer2_xop_helper_create(hammer2_pfs_t *pmp)
 			    NULL, "h2xop", i, j, hammer2_primary_xops_thread);
 		}
 	}
+
+	/* Dedicated dirty-chain flusher (woken by hammer2_pfs_memory_wait). */
+	if (pmp->flush_thr.td == NULL)
+		hammer2_thr_create(&pmp->flush_thr, pmp, NULL, "h2flush",
+		    0, -1, hammer2_primary_flush_thread);
 }
 
 /*
@@ -1290,6 +1353,9 @@ hammer2_xop_helper_cleanup(hammer2_pfs_t *pmp)
 {
 	int i;
 	int j;
+
+	if (pmp->flush_thr.td)
+		hammer2_thr_delete(&pmp->flush_thr);
 
 	if (pmp->xop_groups == NULL) {
 		KKASSERT(pmp->has_xop_threads == 0);

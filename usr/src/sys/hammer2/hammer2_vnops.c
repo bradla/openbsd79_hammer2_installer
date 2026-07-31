@@ -949,8 +949,13 @@ hammer2_write(void *v)
 	 * Back-pressure BEFORE taking any HAMMER2 lock or starting the
 	 * transaction: without this a big write load runs the M_HAMMER2
 	 * malloc budget to its ceiling and wedges the filesystem for good.
+	 *
+	 * Pass vp so the throttle can drop the vnode lock while it parks:
+	 * we are inside VOP_WRITE with vp held LK_EXCLUSIVE by vn_write(),
+	 * and the flush thread must be able to vget() this vnode to drain
+	 * dirty chains (see hammer2_pfs_memory_wait() for the full deadlock).
 	 */
-	hammer2_pfs_memory_wait(ip->pmp);
+	hammer2_pfs_memory_wait(ip->pmp, vp);
 
 	/*
 	 * The transaction interlocks against flush initiations
@@ -1796,8 +1801,20 @@ hammer2_rename(void *v)
 	uint64_t mtime;
 	int error, update_fdip = 0, update_tdip = 0;
 
-	KKASSERT(fdvp == tdvp || VOP_ISLOCKED(fdvp) == 0);
-	KKASSERT(VOP_ISLOCKED(fvp) == 0);
+	/*
+	 * fdvp and fvp are passed to VOP_RENAME referenced but UNLOCKED by
+	 * the caller (unlike tdvp/tvp, which are locked exclusive).  We must
+	 * not assert they are wholly unlocked: on OpenBSD, VOP_ISLOCKED maps
+	 * to rrw_status(), which returns RW_READ whenever *any* other thread
+	 * holds the vnode shared (e.g. syslogd writing the very log newsyslog
+	 * is renaming), and RW_WRITE_OTHER when another thread holds it
+	 * exclusive.  Those are legitimate concurrent accesses -- the
+	 * vn_lock(fvp/fdvp, LK_EXCLUSIVE) below simply waits for them.  Only
+	 * LK_EXCLUSIVE (== RW_WRITE, held by *this* thread) would be a real
+	 * recursion bug, so that is all we assert against here.
+	 */
+	KKASSERT(fdvp == tdvp || VOP_ISLOCKED(fdvp) != LK_EXCLUSIVE);
+	KKASSERT(VOP_ISLOCKED(fvp) != LK_EXCLUSIVE);
 	KKASSERT(VOP_ISLOCKED(tdvp) == LK_EXCLUSIVE);
 	KKASSERT(tvp == NULL || VOP_ISLOCKED(tvp) == LK_EXCLUSIVE);
 

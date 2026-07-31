@@ -130,11 +130,16 @@ hammer2_io_alloc(hammer2_dev_t *hmp, hammer2_off_t data_off, uint8_t btype,
 		dio->btype = btype;
 		dio->refs = 1;
 		dio->act = 5;
+		dio->dbg_ra = hammer2_dbg_last_ra; /* DEBUG: set by io_new/bread wrappers */
+		if (hammer2_dio_trace && btype == HAMMER2_BREF_TYPE_DATA)
+			printf("h2t CREATE pb=%08x refs=1 ra=%p\n",
+			    (unsigned)pbase, hammer2_dbg_last_ra);
 		hammer2_mtx_init(&dio->lock, "h2io_inplk");
 		hammer2_mtx_ex(&dio->lock);
 		xio = hammer2_io_hash_enter(hmp, dio, NULL);
 		if (xio == NULL) {
 			atomic_add_int(&hammer2_count_dio_allocated, 1);
+			atomic_add_int(&hammer2_dio_by_type[btype & 15], 1); /* DEBUG */
 		} else {
 			hammer2_mtx_unlock(&dio->lock);
 			hammer2_mtx_destroy(&dio->lock);
@@ -149,6 +154,36 @@ hammer2_io_alloc(hammer2_dev_t *hmp, hammer2_off_t data_off, uint8_t btype,
 	dio->ticks = getticks();
 	if (dio->act < 10)
 		++dio->act;
+
+	{	/* DEBUG: periodically report net dio allocations per bref type */
+		static int dbg_n;
+		if (hammer2_dio_trace && (++dbg_n & 2047) == 0) {
+			int hi, shown = 0;
+			hammer2_io_t *d;
+
+			printf("h2 dio_by_type INODE=%d IND=%d DATA=%d DIRENT=%d "
+			    "FMNODE=%d FMLEAF=%d FREEMAP=%d VOL=%d tot=%d\n",
+			    hammer2_dio_by_type[1], hammer2_dio_by_type[2],
+			    hammer2_dio_by_type[3], hammer2_dio_by_type[4],
+			    hammer2_dio_by_type[5], hammer2_dio_by_type[6],
+			    hammer2_dio_by_type[14], hammer2_dio_by_type[15],
+			    hammer2_count_dio_allocated);
+			/* We hold hmp->iohash_lock, so walking this hash is safe. */
+			for (hi = 0; hi < HAMMER2_IOHASH_SIZE && shown < 6; ++hi) {
+				for (d = hmp->iohash[hi].base; d && shown < 6;
+				    d = d->next) {
+					if (d->btype == HAMMER2_BREF_TYPE_DATA &&
+					    (d->refs & HAMMER2_DIO_MASK) != 0) {
+						printf("h2 leaked DATA dio refs=%llx "
+						    "ra=%p\n", (unsigned long long)
+						    (d->refs & HAMMER2_DIO_MASK),
+						    d->dbg_ra);
+						++shown;
+					}
+				}
+			}
+		}
+	}
 
 	hammer2_assert_io_refs(dio);
 
@@ -286,6 +321,10 @@ _hammer2_io_putblk(hammer2_io_t **diop HAMMER2_IO_DEBUG_ARGS)
 	*diop = NULL;
 
 	hammer2_mtx_ex(&dio->lock);
+	if (hammer2_dio_trace && dio->btype == HAMMER2_BREF_TYPE_DATA)
+		printf("h2t PUT-- pb=%08x refs=%d ra=%p\n",
+		    (unsigned)dio->pbase, (int)(dio->refs & HAMMER2_DIO_MASK),
+		    __builtin_return_address(0));
 	if ((dio->refs & HAMMER2_DIO_MASK) == 0) {
 		hammer2_mtx_unlock(&dio->lock);
 		return; /* lost race */
@@ -381,6 +420,10 @@ hammer2_io_putblk(hammer2_io_t **diop)
 	*diop = NULL;
 
 	hammer2_mtx_ex(&dio->lock);
+	if (hammer2_dio_trace && dio->btype == HAMMER2_BREF_TYPE_DATA)
+		printf("h2t PUT-- pb=%08x refs=%d ra=%p\n",
+		    (unsigned)dio->pbase, (int)(dio->refs & HAMMER2_DIO_MASK),
+		    __builtin_return_address(0));
 	if ((dio->refs & HAMMER2_DIO_MASK) == 0) {
 		hammer2_mtx_unlock(&dio->lock);
 		return; /* lost race */
@@ -485,6 +528,7 @@ int
 hammer2_io_new(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
     hammer2_io_t **diop)
 {
+	hammer2_dbg_last_ra = __builtin_return_address(0); /* DEBUG */
 	*diop = hammer2_io_getblk(hmp, btype, lbase, lsize, HAMMER2_DOP_NEW);
 	return ((*diop)->error);
 }
@@ -493,6 +537,7 @@ int
 hammer2_io_newnz(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
     hammer2_io_t **diop)
 {
+	hammer2_dbg_last_ra = __builtin_return_address(0); /* DEBUG */
 	*diop = hammer2_io_getblk(hmp, btype, lbase, lsize, HAMMER2_DOP_NEWNZ);
 	return ((*diop)->error);
 }
@@ -516,6 +561,7 @@ _hammer2_io_bread(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
 hammer2_io_t *
 hammer2_io_getquick(hammer2_dev_t *hmp, off_t lbase, int lsize)
 {
+	hammer2_dbg_last_ra = __builtin_return_address(0); /* DEBUG */
 	return (hammer2_io_getblk(hmp, 0, lbase, lsize, HAMMER2_DOP_READQ));
 }
 
@@ -624,6 +670,12 @@ hammer2_io_hash_lookup(hammer2_dev_t *hmp, hammer2_off_t pbase, uint64_t *refsp)
 		if (dio->pbase == pbase) {
 			hammer2_mtx_ex(&dio->lock);
 			refs = dio->refs++;
+			dio->dbg_ra = hammer2_dbg_last_ra; /* DEBUG: last reffer */
+			if (hammer2_dio_trace && dio->btype == HAMMER2_BREF_TYPE_DATA)
+				printf("h2t LOOK++ pb=%08x refs=%d->%d ra=%p\n",
+				    (unsigned)pbase, (int)(refs & HAMMER2_DIO_MASK),
+				    (int)((refs & HAMMER2_DIO_MASK) + 1),
+				    hammer2_dbg_last_ra);
 			if ((refs & HAMMER2_DIO_MASK) == 0)
 				atomic_add_int(&dio->hmp->iofree_count, -1);
 			if (refsp)
@@ -661,6 +713,12 @@ hammer2_io_hash_enter(hammer2_dev_t *hmp, hammer2_io_t *dio, uint64_t *refsp)
 	for (xiop = &hash->base; (xio = *xiop) != NULL; xiop = &xio->next) {
 		if (xio->pbase == dio->pbase) {
 			refs = xio->refs++;
+			xio->dbg_ra = hammer2_dbg_last_ra; /* DEBUG: last reffer */
+			if (hammer2_dio_trace && xio->btype == HAMMER2_BREF_TYPE_DATA)
+				printf("h2t ENTER++ pb=%08x refs=%d->%d ra=%p\n",
+				    (unsigned)dio->pbase, (int)(refs & HAMMER2_DIO_MASK),
+				    (int)((refs & HAMMER2_DIO_MASK) + 1),
+				    hammer2_dbg_last_ra);
 			if ((refs & HAMMER2_DIO_MASK) == 0)
 				atomic_add_int(&xio->hmp->iofree_count, -1);
 			if (refsp)
@@ -722,6 +780,7 @@ hammer2_io_hash_cleanup(hammer2_dev_t *hmp, int dio_limit)
 			--count;
 			/* diop remains unchanged */
 			atomic_add_int(&hammer2_count_dio_allocated, -1);
+			atomic_add_int(&hammer2_dio_by_type[dio->btype & 15], -1); /* DEBUG */
 			atomic_add_int(&hmp->iofree_count, -1);
 		}
 		//hammer2_spin_unex(&hash->spin);
@@ -764,6 +823,7 @@ hammer2_io_hash_cleanup_all(hammer2_dev_t *hmp)
 			if (dio->refs & HAMMER2_DIO_DIRTY)
 				hprintf("dirty buffer %016llx/%d\n",
 				    (long long)dio->pbase, dio->psize);
+			atomic_add_int(&hammer2_dio_by_type[dio->btype & 15], -1); /* DEBUG */
 			hammer2_mtx_destroy(&dio->lock);
 			hfree(dio, M_HAMMER2, sizeof(*dio));
 			atomic_add_int(&hammer2_count_dio_allocated, -1);

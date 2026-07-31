@@ -79,6 +79,9 @@ int hammer2_count_chain_allocated;
 int hammer2_cluster_enable = 1;		/* master/slave sync engine (DragonFly-faithful: on; vfs.hammer2.cluster_enable) */
 int hammer2_count_chain_modified;
 int hammer2_count_dio_allocated;
+int hammer2_dio_by_type[16];	/* DEBUG: net dio allocations per bref type */
+void *hammer2_dbg_last_ra;	/* DEBUG: creator RA stashed by io_new/newnz */
+int hammer2_dio_trace;		/* DEBUG: gate for per-op h2t DATA dio trace */
 int hammer2_dio_limit = 256;
 int hammer2_bulkfree_tps = 5000;
 int hammer2_limit_scan_depth;
@@ -121,6 +124,7 @@ static const struct sysctl_bounded_args hammer2_vars[] = {
 	{ HAMMER2CTL_LIMIT_SAVED_CHAINS, &hammer2_limit_saved_chains, 0, INT_MAX, },
 	{ HAMMER2CTL_ALWAYS_COMPRESS, &hammer2_always_compress, 0, INT_MAX, },
 	{ HAMMER2CTL_CLUSTER_ENABLE, &hammer2_cluster_enable, 0, 1, },
+	{ HAMMER2CTL_DIO_TRACE, &hammer2_dio_trace, 0, 1, }, /* DEBUG */
 };
 
 static unsigned long
@@ -2268,34 +2272,102 @@ restart:
  * The sleep is a plain timed retry: no wakeup plumbing, so nothing can be
  * missed or lost, at the cost of up to a tick of latency per pass.
  */
+/* kern/vfs_bio.c: dirty-page high-water mark; not declared in any header. */
+extern long hidirtypages;
+
 void
-hammer2_pfs_memory_wait(hammer2_pfs_t *pmp)
+hammer2_pfs_memory_wait(hammer2_pfs_t *pmp, struct vnode *vp)
 {
 	int i;
+	int unlocked = 0;
 
 	if (pmp == NULL || pmp->mp == NULL)
 		return;
 
 	for (i = 0; i < HAMMER2_MEMORY_WAIT_MAX; ++i) {
+		/*
+		 * Back off on FOUR independent pressure sources, whichever
+		 * trips first.  The first two (dirty chains, M_HAMMER2 kmem)
+		 * are HAMMER2's own accounting.  The last two are the OpenBSD
+		 * buffer cache, and they are what actually deadlocked us under
+		 * sustained concurrent writers (proven in ddb):
+		 *
+		 *   - UNCLEAN_PAGES vs hidirtypages: UNCLEAN_PAGES is
+		 *     numbufpages-numcleanpages, i.e. every buffer-cache page
+		 *     that is dirty or busy -- the SAME quantity buf_daemon
+		 *     watches (kern/vfs_bio.c).  HAMMER2 is COW and
+		 *     double-buffers (logical file bufs + physical device bufs,
+		 *     64KB each), so a write load drives unclean pages far past
+		 *     the high-water mark.  Once too few clean pages remain to
+		 *     reclaim, buf_get() wedges every writer in "needbuffer".
+		 *     Backing off at hidirtypages -- exactly where the kernel
+		 *     starts cleaning -- keeps ~96% of the cache clean and
+		 *     reclaimable, so buf_get() never has to block.
+		 *     (An earlier version used bcstats.numdirtypages here, which
+		 *     is dirty *free* pages and stays ~0, so it never tripped.)
+		 *
+		 *   - kvaslots_avail vs RESERVE_SLOTS: the buffer KVA map.  When
+		 *     every mapped buffer is busy, buf_map() finds nothing on
+		 *     buf_valist to steal and blocks in "buf_needva" -- where
+		 *     buf_daemon (the cleaner) itself deadlocked: it needs KVA
+		 *     to write buffers out, but KVA only frees once buffers are
+		 *     written.  Capping unclean pages above already bounds the
+		 *     busy set; this keeps an explicit slot backstop.
+		 *
+		 * Parking here (in "h2memw", vnode released above) is safe;
+		 * reaching "needbuffer"/"buf_needva" holding buffers is fatal.
+		 */
 		if (hammer2_count_chain_modified <= hammer2_limit_dirty_chains
 #ifdef KMEMSTATS
 		    && kmemstats[M_HAMMER2].ks_memuse <=
 		       kmemstats[M_HAMMER2].ks_limit / 2
 #endif
+		    && UNCLEAN_PAGES < hidirtypages
+		    && bcstats.kvaslots_avail > 4 * RESERVE_SLOTS
 		    )
-			return;
+			break;
 		/*
-		 * Drive the flush ourselves rather than waiting up to ~30s for
-		 * the periodic filesystem syncer to run.  We hold no HAMMER2
-		 * locks here (called before trans_init/inode_lock) and this is
-		 * always a frontend writer (never a backend/syncer thread), so
-		 * running the flush transaction here is safe: concurrent
-		 * throttled writers serialize on the ISFLUSH transaction rather
-		 * than deadlock.  This turns a multi-second per-throttle stall
-		 * (waiting for the next periodic sync) into a flush-at-disk-
-		 * speed drain, then a short pause before re-checking.
+		 * CRITICAL: drop the caller's vnode lock before parking.
+		 *
+		 * The write path (hammer2_write) is entered from vn_write()
+		 * with the vnode held LK_EXCLUSIVE, and this throttle runs
+		 * inside VOP_WRITE.  The dedicated flush thread drains dirty
+		 * chains by vget(LK_EXCLUSIVE|LK_NOWAIT) on each dirty inode's
+		 * vnode (hammer2_vfs_sync_pmp stage 1).  If we sleep here still
+		 * holding this vnode, that vget fails, the sync loop requeues
+		 * the inode and restarts forever ("dorestart"), never reaching
+		 * stage 2 to release the ISFLUSH transaction, so the dirty
+		 * count never drops and we never wake -- a hard livelock.
+		 * Proven in ddb: dd's in "h2memw" holding their vnodes,
+		 * h2flush-* spinning "h2syndel" holding ISFLUSH, syncer
+		 * "update" stuck in "h2pmp_tr".  Releasing the vnode lets the
+		 * flusher acquire it, drain, and wake us.  We only unlock once
+		 * we know we must sleep (the fast, no-pressure path never
+		 * touches the lock), and relock before returning so the
+		 * VOP_WRITE contract is preserved.
 		 */
-		hammer2_vfs_sync_pmp(pmp, MNT_NOWAIT);
+		if (vp != NULL && !unlocked) {
+			VOP_UNLOCK(vp);
+			unlocked = 1;
+		}
+		/*
+		 * Wake the dedicated per-pmp flush thread to drain dirty
+		 * chains, rather than running the flush on this frontend write
+		 * thread, and park until it makes progress.  This still avoids
+		 * the multi-second stall of waiting for the ~30s periodic
+		 * syncer.
+		 *
+		 * Driving hammer2_vfs_sync_pmp() directly from here deadlocks
+		 * under concurrent writers: this thread would hold the single
+		 * ISFLUSH transaction while other throttled writers block in
+		 * hammer2_trans_init() ("h2pmp_tr") waiting for it, and it would
+		 * itself block in the flush restart loop ("h2syndel") waiting
+		 * for them.  Funneling all throttle-driven flushing through the
+		 * single flush thread (like the syncer) means frontends never
+		 * enter the flush or contend for the transaction.
+		 */
+		if (pmp->flush_thr.td)
+			hammer2_thr_signal(&pmp->flush_thr, HAMMER2_THREAD_XOPQ);
 		tsleep(&hammer2_count_chain_modified, PRIBIO, "h2memw",
 		    hz / 50);
 	}
@@ -2305,6 +2377,8 @@ hammer2_pfs_memory_wait(hammer2_pfs_t *pmp)
 	 * behaviour and keeps a pathological case from hanging a process
 	 * uninterruptibly.
 	 */
+	if (unlocked)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 }
 
 /*

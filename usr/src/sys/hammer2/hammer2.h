@@ -297,6 +297,7 @@ struct hammer2_io {
 #endif
 	uint64_t	dedup_valid;	/* valid for dedup operation */
 	uint64_t	dedup_alloc;	/* allocated / de-dupable */
+	void		*dbg_ra;	/* DEBUG: return addr of creator */
 #ifdef HAMMER2_IO_DEBUG
 	const char	*debug_file[HAMMER2_IO_DEBUG_COUNT];
 	void		*debug_td[HAMMER2_IO_DEBUG_COUNT];
@@ -1356,6 +1357,7 @@ struct hammer2_pfs {
 	int			has_xop_threads;
 	hammer2_spin_t		xop_spin;	/* xop sequencer */
 	hammer2_xop_group_t	*xop_groups;
+	hammer2_thread_t	flush_thr;	/* dedicated dirty-chain flusher */
 	unsigned long		ipdep_mask;
 	hammer2_off_t		free_reserved;
 	hammer2_off_t		free_nominal;
@@ -1568,6 +1570,9 @@ extern int hammer2_count_chain_modified;
 /* hammer2_pfs_memory_wait(): passes of hz/10 before giving up (~30s). */
 #define HAMMER2_MEMORY_WAIT_MAX	300
 extern int hammer2_count_dio_allocated;
+extern int hammer2_dio_by_type[16];	/* DEBUG */
+extern void *hammer2_dbg_last_ra;	/* DEBUG */
+extern int hammer2_dio_trace;		/* DEBUG */
 extern int hammer2_dio_limit;
 extern int hammer2_bulkfree_tps;
 extern int hammer2_spread_workers;
@@ -1824,7 +1829,7 @@ void hammer2_voldata_lock(hammer2_dev_t *);
 void hammer2_voldata_unlock(hammer2_dev_t *);
 void hammer2_voldata_modify(hammer2_dev_t *);
 int hammer2_vfs_enospace(hammer2_inode_t *, off_t, struct ucred *);
-void hammer2_pfs_memory_wait(hammer2_pfs_t *pmp);
+void hammer2_pfs_memory_wait(hammer2_pfs_t *pmp, struct vnode *vp);
 void hammer2_pfs_memory_inc(hammer2_pfs_t *pmp);
 void hammer2_pfs_memory_wakeup(hammer2_pfs_t *pmp, int count);
 
@@ -1892,6 +1897,7 @@ int hammer2_xop_collect(hammer2_xop_head_t *, int);
 void hammer2_xop_helper_create(hammer2_pfs_t *);
 void hammer2_xop_helper_cleanup(hammer2_pfs_t *);
 void hammer2_primary_xops_thread(void *arg);
+void hammer2_primary_flush_thread(void *arg);
 
 /*
  * hammer2 kernel-thread management (hammer2_admin.c)
