@@ -2116,8 +2116,9 @@ restart:
 		 * update the parent.
 		 */
 		if (ip->flags & HAMMER2_INODE_DELETING) {
-			debug_hprintf("inum %016llx destroy\n",
-			    (long long)ip->meta.inum);
+			if (hammer2_dio_trace)
+				printf("h2del SYNCQ destroy inum=%016llx\n",
+				    (long long)ip->meta.inum);
 			hammer2_inode_chain_des(ip);
 		} else if (ip->flags & HAMMER2_INODE_CREATING) {
 			debug_hprintf("inum %016llx insert\n",

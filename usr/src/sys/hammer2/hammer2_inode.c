@@ -1316,8 +1316,15 @@ hammer2_inode_unlink_finisher(hammer2_inode_t *ip, struct vnode **vprecyclep)
 	/*
 	 * Decrement nlinks.  Catch a bad nlinks count here too (e.g. 0 or
 	 * negative), and just assume a transition to 0.
+	 *
+	 * NOTE: This condition was INVERTED in the port (was `<= 1`), which meant
+	 *	 the last-link removal (nlinks<=1) fell through without ever marking
+	 *	 the inode INODE_DELETING/ISUNLINKED -- so deleted files were never
+	 *	 destroyed and their data blocks were never freed (freemap "leak";
+	 *	 bulkfree correctly preserved them because the orphaned inode chains
+	 *	 remained referenced).  DragonFly uses `> 1` here.
 	 */
-	if ((int64_t)ip->meta.nlinks <= 1) {
+	if ((int64_t)ip->meta.nlinks > 1) {
 		hammer2_update_time(&ctime);
 	} else {
 		atomic_set_int(&ip->flags, HAMMER2_INODE_ISUNLINKED);

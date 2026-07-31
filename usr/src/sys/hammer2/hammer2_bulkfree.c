@@ -620,26 +620,13 @@ hammer2_bulkfree_pass(hammer2_dev_t *hmp, hammer2_chain_t *vchain,
 	if (incr > 10000)
 		incr = 10000;
 
-	hprintf("bulkfree pass statistics (%d.%02d%% storage processed):\n",
-	    (int)incr / 100, (int)incr % 100);
-
-	if (error & ~HAMMER2_ERROR_CHECK) {
-		hprintf("    bulkfree was aborted\n");
-	} else {
-		if (error & HAMMER2_ERROR_CHECK)
-			hprintf("    WARNING: encountered CRC errors\n");
-		hprintf("    transition->free   %ld\n", cbinfo.count_10_00);
-		hprintf("    transition->staged %ld\n", cbinfo.count_11_10);
-		hprintf("    ERR(00)->allocated %ld\n", cbinfo.count_00_11);
-		hprintf("    ERR(01)->allocated %ld\n", cbinfo.count_01_11);
-		hprintf("    staged->allocated  %ld\n", cbinfo.count_10_11);
-		hprintf("    ~4MB segs cleaned  %ld\n", cbinfo.count_l0cleans);
-		hprintf("    linear adjusts     %ld\n",
-		    cbinfo.count_linadjusts);
-		hprintf("    dedup factor       %ld\n",
-		    cbinfo.count_dedup_factor);
-		hprintf("    max saved chains   %ld\n", cbinfo.list_count_max);
-	}
+	printf("h2bf pass stats (%d.%02d%% processed): "
+	    "10->00free=%ld 11->10stage=%ld 00->11ERR=%ld 10->11=%ld "
+	    "l0cleans=%ld adj_free=%lld err=%08x\n",
+	    (int)incr / 100, (int)incr % 100,
+	    cbinfo.count_10_00, cbinfo.count_11_10, cbinfo.count_00_11,
+	    cbinfo.count_10_11, cbinfo.count_l0cleans,
+	    (long long)cbinfo.adj_free, error);
 
 	return (error);
 }
