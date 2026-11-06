@@ -882,7 +882,6 @@ hammer2_xop_feed(hammer2_xop_head_t *xop, hammer2_chain_t *chain, int clindex,
     int error)
 {
 	hammer2_xop_fifo_t *fifo;
-	size_t old_fifo_size;
 	uint64_t mask;
 
 	/* Early termination (typically of xop_readir). */
@@ -896,15 +895,43 @@ hammer2_xop_feed(hammer2_xop_head_t *xop, hammer2_chain_t *chain, int clindex,
 	 * We own the fifo->wi for our clindex.
 	 */
 	fifo = &xop->collect[clindex];
+
+	/*
+	 * FIFO full: block until the frontend drains it (DragonFly semantics).
+	 *
+	 * The FreeBSD-derived code used to GROW the fifo here instead.  That is
+	 * only safe when the XOP runs synchronously in the frontend thread.  This
+	 * port runs XOPs in backend worker threads, so growing raced the frontend
+	 * collector, which reads fifo->array lock-free:
+	 *  - use-after-free of the old array, and
+	 *  - fifo_mask() changes from N-1 to 2N-1 while entries sit at slot
+	 *    (k & (N-1)).  With ri not 2N-aligned the frontend then reads zeroed
+	 *    slots, gets chain==NULL/error==0 == CITEM_NULL == "end of scan", and
+	 *    readdir returns EOF early.  The rest of the directory silently
+	 *    vanishes (lost headers in make includes, rm -rf "Directory not
+	 *    empty", make "don't know how to make <existing file>").
+	 * The fifo size is now fixed for the life of the XOP.
+	 */
 	while (fifo->ri == fifo->wi - xop->fifo_size) {
-		if ((xop->run_mask & HAMMER2_XOPMASK_VOP) == 0) {
+		atomic_set_int(&fifo->flags, HAMMER2_XOP_FIFO_STALL);
+		mask = xop->run_mask;
+		if ((mask & HAMMER2_XOPMASK_VOP) == 0) {
 			error = HAMMER2_ERROR_ABORTED;
 			goto done;
 		}
-		old_fifo_size = xop->fifo_size;
-		xop->fifo_size *= 2;
-		hammer2_xop_fifo_alloc(fifo, xop->fifo_size, old_fifo_size);
+		tsleep_interlock(xop, 0);
+		if (atomic_cmpset_64(&xop->run_mask, mask,
+		    mask | HAMMER2_XOPMASK_FIFOW)) {
+			/*
+			 * Re-check after publishing FIFOW.  OpenBSD's
+			 * tsleep_interlock is a no-op, so a wakeup lost in this
+			 * window costs one short timeout, not a hang.
+			 */
+			if (fifo->ri == fifo->wi - xop->fifo_size)
+				tsleep(xop, PINTERLOCKED, "h2feed", hz / 10 + 1);
+		}
 	}
+	atomic_clear_int(&fifo->flags, HAMMER2_XOP_FIFO_STALL);
 
 	if (chain)
 		hammer2_chain_ref_hold(chain);
@@ -912,7 +939,7 @@ hammer2_xop_feed(hammer2_xop_head_t *xop, hammer2_chain_t *chain, int clindex,
 		error = chain->error;
 	fifo->errors[fifo->wi & fifo_mask(xop)] = error;
 	fifo->array[fifo->wi & fifo_mask(xop)] = chain;
-	cpu_ccfence();
+	membar_producer();	/* slot contents visible before wi advances */
 	++fifo->wi;
 
 	/*
@@ -977,6 +1004,7 @@ loop:
 
 		fifo = &xop->collect[i];
 		if (fifo->ri != fifo->wi) {
+			membar_consumer();	/* see wi before slot contents */
 			chain = fifo->array[fifo->ri & fifo_mask(xop)];
 			error = fifo->errors[fifo->ri & fifo_mask(xop)];
 			++fifo->ri;
@@ -985,6 +1013,16 @@ loop:
 			if (chain == NULL)
 				xop->cluster.array[i].flags |=
 				    HAMMER2_CITEM_NULL;
+			/*
+			 * Wake a backend feeder stalled on a full fifo once
+			 * there is room (see hammer2_xop_feed).
+			 */
+			if (fifo->wi - fifo->ri <= xop->fifo_size / 2 &&
+			    (fifo->flags & HAMMER2_XOP_FIFO_STALL)) {
+				atomic_clear_int(&fifo->flags,
+				    HAMMER2_XOP_FIFO_STALL);
+				wakeup(xop);
+			}
 			--i; /* Loop on same index. */
 		} else {
 			/*

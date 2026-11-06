@@ -301,7 +301,18 @@ hammer2_calc_physical(hammer2_inode_t *ip, hammer2_key_t lbase)
 void
 hammer2_update_time(uint64_t *timep)
 {
-	*timep = (uint64_t)gettime();
+	struct timeval tv;
+
+	/*
+	 * HAMMER2 on-disk times are MICROseconds since the epoch (see
+	 * hammer2_time_to_timespec).  This used gettime(), which returns
+	 * SECONDS, so every create/write/rename/remove stamped
+	 * atime/mtime/ctime ~1e6 too small (Jan 1970). 
+	 * which re-triggered -j races such as isakmpd's
+	 * genfields/genconstants.  Same as DragonFly: getmicrotime -> usec.
+	 */
+	getmicrotime(&tv);
+	*timep = (uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec;
 }
 
 void

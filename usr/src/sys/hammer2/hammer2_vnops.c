@@ -626,9 +626,13 @@ hammer2_readdir(void *v)
 		error = 0;
 		eofflag = 1;
 		saveoff = (hammer2_key_t)-1;
-	} else {
-		saveoff = bref.key & HAMMER2_DIRHASH_USERMSK;
 	}
+	/*
+	 * Otherwise saveoff already holds the key of the entry that did not fit
+	 * (set in the loop), so the next call resumes there.  The old
+	 * "saveoff = bref.key" here read an uninitialized bref when the very
+	 * first collect failed.
+	 */
 done:
 	hammer2_inode_unlock(ip);
 

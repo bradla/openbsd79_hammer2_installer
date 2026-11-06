@@ -3,7 +3,7 @@
 PROG=	sysctl
 MAN=	sysctl.8
 
-CFLAGS+=        -I../../sys
+CFLAGS+=        -I${.CURDIR}/../../sys
 
 afterinstall:
 	ln -sf ../../sbin/sysctl ${DESTDIR}/usr/sbin
