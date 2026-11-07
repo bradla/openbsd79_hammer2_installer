@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_disk.c,v 1.284 2025/11/17 14:27:43 jsg Exp $	*/
+/*	$OpenBSD: subr_disk.c,v 1.287 2026/08/09 19:22:49 gnezdo Exp $	*/
 /*	$NetBSD: subr_disk.c,v 1.17 1996/03/16 23:17:08 christos Exp $	*/
 
 /*
@@ -140,6 +140,8 @@ initdisklabel(struct disklabel *lp)
 	int i;
 
 	/* minimal requirements for archetypal disk label */
+	if (lp->d_secsize > MAXPHYS)
+		return (ERANGE);
 	if (lp->d_secsize < DEV_BSIZE)
 		lp->d_secsize = DEV_BSIZE;
 	if (DL_GETDSIZE(lp) == 0)
@@ -174,18 +176,19 @@ checkdisklabel(dev_t dev, void *rlp, struct disklabel *lp, u_int64_t boundstart,
 	int error = 0;
 	int i;
 
+	/* These fields may not be 0, no point trying a byteswap */
+	if (dlp->d_secpercyl == 0 || dlp->d_nsectors == 0 ||
+	    dlp->d_version == 0)
+		return EINVAL;	/* invalid label */
+	else if (dlp->d_secsize == 0)
+		return ENOSPC; /* disk too small */
+
 	if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC)
 		error = ENOENT;	/* no disk label */
 	else if (dlp->d_npartitions > MAXPARTITIONS)
 		error = E2BIG;	/* too many partitions */
-	else if (dlp->d_secpercyl == 0)
-		error = EINVAL;	/* invalid label */
-	else if (dlp->d_secsize == 0)
-		error = ENOSPC;	/* disk too small */
 	else if (dkcksum(dlp) != 0)
 		error = EINVAL;	/* incorrect checksum */
-	else if (dlp->d_version == 0)
-		error = EINVAL;	/* version too old to understand */
 
 	if (error) {
 		u_int16_t *start, *end, sum = 0;
@@ -871,7 +874,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_int64_t openmask)
 
 	/* sanity clause */
 	if (nlp->d_secpercyl == 0 || nlp->d_secsize == 0 ||
-	    (nlp->d_secsize % DEV_BSIZE) != 0)
+	    nlp->d_secsize > MAXPHYS || (nlp->d_secsize % DEV_BSIZE) != 0)
 		return (EINVAL);
 
 	/* special case to allow disklabel to be invalidated */
@@ -880,8 +883,11 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_int64_t openmask)
 		return (0);
 	}
 
-	if (nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC ||
-	    dkcksum(nlp) != 0)
+	if (nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC)
+		return (ENOENT);
+	else if (nlp->d_npartitions > MAXPARTITIONS)
+		return (E2BIG);
+	else if (dkcksum(nlp) != 0)
 		return (EINVAL);
 
 	/* XXX missing check if other dos partitions will be overwritten */
@@ -1327,16 +1333,16 @@ dk_mountroot(void)
 		{
 		extern int cd9660_mountroot(void);
 		mountrootfn = cd9660_mountroot;
-                }
-                break;
+		}
+		break;
 #endif
 #ifdef HAMMER2
-       case FS_HAMMER2:
-               {
-               extern int hammer2_mountroot(void);
-               mountrootfn = hammer2_mountroot;
-               }
-	       break;
+	case FS_HAMMER2:
+		{
+		extern int hammer2_mountroot(void);
+		mountrootfn = hammer2_mountroot;
+		}
+		break;
 #endif
 	default:
 #ifdef FFS

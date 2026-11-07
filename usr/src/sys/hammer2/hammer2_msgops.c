@@ -46,7 +46,6 @@ hammer2_msg_adhoc_input(kdmsg_msg_t *msg)
 	return(0);
 }
 
-/*
 int
 hammer2_msg_dbg_rcvmsg(kdmsg_msg_t *msg)
 {
@@ -68,4 +67,4 @@ hammer2_msg_dbg_rcvmsg(kdmsg_msg_t *msg)
 		break;
 	}
 	return(0);
-}*/
+}

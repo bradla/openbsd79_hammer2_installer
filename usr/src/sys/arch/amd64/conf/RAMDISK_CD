@@ -1,4 +1,4 @@
-#	$OpenBSD: RAMDISK_CD,v 1.214 2026/04/18 18:23:50 gnezdo Exp $
+#	$OpenBSD: RAMDISK_CD,v 1.216 2026/08/19 08:56:28 hshoexer Exp $
 
 machine		amd64
 maxusers	4
@@ -20,13 +20,14 @@ option		UDF
 option		MSDOSFS
 option		INET6
 option		CRYPTO
+option		AMDSEV
 
 option		FONT_SPLEEN8x16
 option		FONT_SPLEEN12x24
 option		FONT_SPLEEN16x32
 
 option		RAMDISK_HOOKS
-option		MINIROOTSIZE=9200
+option		MINIROOTSIZE=9200	# HAMMER2: room for hammer2 tools
 
 config		bsd root on rd0a swap on rd0b and wd0b and sd0b
 
@@ -294,7 +295,7 @@ iwn*		at pci?			# Intel Wireless WiFi Link 4965AGN
 iwm*		at pci?			# Intel WiFi Link 7xxx
 iwx*		at pci?			# Intel WiFi Link 22xxx
 qwx*		at pci?			# Qualcomm 802.11ax
-#qwz*		at pci?			# Qualcomm 802.11be
+qwz*		at pci?			# Qualcomm 802.11be
 ral*		at pci?			# Ralink RT2500/RT2501/RT2600
 ral*		at cardbus?		# Ralink RT2500/RT2501/RT2600
 rtw*		at pci?			# Realtek 8180
