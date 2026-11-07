@@ -113,7 +113,6 @@ hammer2_inactive(void *v)
 
 		VOP_UNLOCK(vp);
 	}
-
 	return (0);
 }
 
@@ -134,7 +133,7 @@ hammer2_reclaim(void *v)
 		vprint("hammer2_reclaim: pushing active", vp);
 #endif
 	if (ip == NULL)
-		return (0);
+		return(0);
 
 	/* The inode lock is required to disconnect it. */
 	hammer2_inode_lock(ip, 0);
@@ -156,7 +155,8 @@ hammer2_reclaim(void *v)
 	 * though so only complain if the stars don't align.
 	 */
 	if ((ip->flags & (HAMMER2_INODE_ISUNLINKED | HAMMER2_INODE_DELETING)) ==
-	    HAMMER2_INODE_ISUNLINKED) {
+	    HAMMER2_INODE_ISUNLINKED)
+	{
 		atomic_set_int(&ip->flags, HAMMER2_INODE_DELETING);
 		hammer2_inode_delayed_sideq(ip);
 		hprintf("inum %016llx unlinked but not disposed\n",
@@ -173,13 +173,14 @@ hammer2_reclaim(void *v)
 	 * Interactions and potential deadlocks abound.  We also can't do it
 	 * here without desynchronizing from the related directory entrie(s).
 	 */
-	hammer2_inode_drop(ip); /* vp ref */
+	hammer2_inode_drop(ip);			/* vp ref */
 
 	/*
 	 * XXX handle background sync when ip dirty, kernel will no longer
 	 * notify us regarding this inode because there is no longer a
 	 * vnode attached to it.
 	 */
+
 	return (0);
 }
 
@@ -327,6 +328,7 @@ hammer2_setattr(void *v)
 
 	if (ip->pmp->rdonly)
 		return (EROFS);
+
 	/*
 	 * Normally disallow setattr if there is no space, unless we
 	 * are in emergency mode (might be needed to chflags -R noschg
@@ -407,7 +409,7 @@ hammer2_setattr(void *v)
 	}
 
 	if (vap->va_size != (u_quad_t)VNOVAL && ip->meta.size != vap->va_size) {
-		switch (vp->v_type) {
+		switch(vp->v_type) {
 		case VLNK:
 		case VREG:
 			if (vap->va_size == ip->meta.size)
@@ -635,7 +637,6 @@ hammer2_readdir(void *v)
 	 */
 done:
 	hammer2_inode_unlock(ip);
-
 	if (ap->a_eofflag)
 		*ap->a_eofflag = eofflag;
 	/*
@@ -854,6 +855,7 @@ hammer2_write_file(hammer2_inode_t *ip, struct uio *uio, int ioflag)
 			 */
 			error = bread(vp, lbn, lblksize, &bp);
 		}
+
 		if (error) {
 			brelse(bp);
 			break;
@@ -900,8 +902,8 @@ hammer2_write_file(hammer2_inode_t *ip, struct uio *uio, int ioflag)
 	 */
 	if (error && new_eof != old_eof) {
 		hammer2_mtx_unlock(&ip->truncate_lock);
-		hammer2_mtx_ex(&ip->lock); /* note lock order */
-		hammer2_mtx_ex(&ip->truncate_lock); /* note lock order */
+		hammer2_mtx_ex(&ip->lock);		/* note lock order */
+		hammer2_mtx_ex(&ip->truncate_lock);	/* note lock order */
 		hammer2_truncate_file(ip, old_eof);
 		if (ip->flags & HAMMER2_INODE_MODIFIED)
 			hammer2_inode_chain_sync(ip);
@@ -1000,7 +1002,8 @@ hammer2_write(void *v)
  * WARNING! Caller assumes responsibility for removing dead blocks
  *	    if INODE_RESIZED is set.
  */
-static void
+static
+void
 hammer2_truncate_file(hammer2_inode_t *ip, hammer2_key_t nsize)
 {
 	int nblksize;
@@ -1035,7 +1038,8 @@ hammer2_truncate_file(hammer2_inode_t *ip, hammer2_key_t nsize)
  * WARNING! Caller assumes responsibility for transitioning out
  *	    of the inode DIRECTDATA mode if INODE_RESIZED is set.
  */
-static void
+static
+void
 hammer2_extend_file(hammer2_inode_t *ip, hammer2_key_t nsize)
 {
 	hammer2_key_t osize;
@@ -1377,7 +1381,7 @@ hammer2_mknod(void *v)
 		 * inode_depend() must occur before the igetv() because
 		 * the igetv() can temporarily release the inode lock.
 		 */
-		hammer2_inode_depend(dip, nip); /* before igetv */
+		hammer2_inode_depend(dip, nip);	/* before igetv */
 		error = hammer2_igetv(nip, &vp);
 		if (error == 0) {
 			*ap->a_vpp = vp;
@@ -1400,6 +1404,7 @@ hammer2_mknod(void *v)
 		/*hammer2_inode_unlock(dip);*/
 	}
 	hammer2_inode_unlock(dip);
+
 	hammer2_trans_done(dip->pmp, HAMMER2_TRANS_SIDEQ);
 
 	if (error == 0) {
@@ -1477,7 +1482,7 @@ hammer2_mkdir(void *v)
 		 * inode_depend() must occur before the igetv() because
 		 * the igetv() can temporarily release the inode lock.
 		 */
-		hammer2_inode_depend(dip, nip); /* before igetv */
+		hammer2_inode_depend(dip, nip);	/* before igetv */
 		error = hammer2_igetv(nip, &vp);
 		if (error == 0) {
 			*ap->a_vpp = vp;
@@ -1570,7 +1575,7 @@ hammer2_create(void *v)
 		 * inode_depend() must occur before the igetv() because
 		 * the igetv() can temporarily release the inode lock.
 		 */
-		hammer2_inode_depend(dip, nip); /* before igetv */
+		hammer2_inode_depend(dip, nip);	/* before igetv */
 		error = hammer2_igetv(nip, &vp);
 		if (error == 0) {
 			*ap->a_vpp = vp;
@@ -1750,7 +1755,7 @@ hammer2_remove(void *v)
 			 */
 			KKASSERT(ip->vp == vp);
 			hammer2_inode_unlink_finisher(ip, NULL);
-			hammer2_inode_depend(dip, ip); /* after modified */
+			hammer2_inode_depend(dip, ip);	/* after modified */
 			hammer2_inode_unlock(ip);
 		}
 	} else {
@@ -1797,7 +1802,7 @@ hammer2_rename(void *v)
 	hammer2_inode_t *fdip = VTOI(fdvp); /* source directory */
 	hammer2_inode_t *fip = VTOI(fvp); /* file being renamed */
 	hammer2_inode_t *tdip = VTOI(tdvp); /* target directory */
-	hammer2_inode_t *tip; /* replaced target during rename or NULL */
+	hammer2_inode_t *tip;	/* replaced target during rename or NULL */
 	hammer2_inode_t *ip1, *ip2, *ip3, *ip4;
 	hammer2_xop_scanlhc_t *sxop;
 	hammer2_xop_nrename_t *xop4;
@@ -1866,7 +1871,7 @@ hammer2_rename(void *v)
 	 */
 	tip = tvp ? VTOI(tvp) : NULL;
 	if (tip)
-		hammer2_inode_ref(tip); /* extra ref */
+		hammer2_inode_ref(tip);	/* extra ref */
 
 	/*
 	 * For now try to avoid deadlocks with a simple pointer address
@@ -1905,6 +1910,7 @@ hammer2_rename(void *v)
 	}
 	error = hammer2_error_to_errno(error);
 	hammer2_xop_retire(&sxop->head, HAMMER2_XOPMASK_VOP);
+
 	if (error) {
 		if (error != ENOENT)
 			goto done2;
@@ -1937,11 +1943,14 @@ hammer2_rename(void *v)
 		hammer2_xop_setname2(&xop4->head, tcnp->cn_nameptr,
 		    tcnp->cn_namelen);
 		hammer2_xop_start(&xop4->head, &hammer2_nrename_desc);
+
 		error = hammer2_xop_collect(&xop4->head, 0);
 		error = hammer2_error_to_errno(error);
 		hammer2_xop_retire(&xop4->head, HAMMER2_XOPMASK_VOP);
+
 		if (error == ENOENT)
 			error = 0;
+
 		/*
 		 * Update inode meta-data.
 		 *
@@ -1961,6 +1970,7 @@ hammer2_rename(void *v)
 		update_fdip = 1;
 		update_tdip = 1;
 	}
+
 done2:
 	/*
 	 * If no error, the backend has replaced the target directory entry.
@@ -2437,7 +2447,7 @@ hammer2_kqfilter(void *v)
 	kn->kn_hook = (caddr_t)vp;
 	klist_insert_locked(&vp->v_klist, kn);
 
-	return (0);
+	return(0);
 }
 
 static void
@@ -2460,7 +2470,7 @@ filt_hammer2read(struct knote *kn, long hint)
 	 */
 	if (hint == NOTE_REVOKE) {
 		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
-		return (1);
+		return(1);
 	}
 
 	kn->kn_data = ip->meta.size - foffset(kn->kn_fp);
@@ -2553,7 +2563,7 @@ hammer2_vinit(struct mount *mp, struct vnode **vpp)
 		vp->v_flag |= VROOT;
 	*vpp = vp;
 
-	return (0);
+	return(0);
 }
 
 /* Global vfs data structures for hammer2. */

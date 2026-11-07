@@ -1137,7 +1137,7 @@ hammer2_ioctl_remote_scan(hammer2_inode_t *ip, void *data)
 	 * Adjust nextid (GET only), skipping to the next populated slot.
 	 */
 	while (++copyid < HAMMER2_COPYID_COUNT &&
-	    hmp->voldata.copyinfo[copyid].copyid == 0) {
+	       hmp->voldata.copyinfo[copyid].copyid == 0) {
 		;
 	}
 	if (copyid == HAMMER2_COPYID_COUNT)
@@ -1145,7 +1145,7 @@ hammer2_ioctl_remote_scan(hammer2_inode_t *ip, void *data)
 	else
 		remote->nextid = copyid;
 
-	return (0);
+	return(0);
 }
 
 /*
@@ -1248,7 +1248,7 @@ hammer2_ioctl_remote_rep(hammer2_inode_t *ip, void *data)
 	/*hammer2_volconf_update(hmp, copyid);*/
 	hammer2_voldata_unlock(hmp);
 
-	return (0);
+	return(0);
 }
 
 /*
@@ -1281,7 +1281,7 @@ hammer2_ioctl_socket_set(hammer2_inode_t *ip, void *data)
 	hammer2_voldata_lock(hmp);
 	hammer2_voldata_unlock(hmp);
 
-	return (0);
+	return(0);
 }
 
 /*

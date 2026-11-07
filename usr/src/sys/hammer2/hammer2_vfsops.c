@@ -257,8 +257,9 @@ hammer2_init(struct vfsconf *vfsp)
  * for PFS cluster mounts and the spmp structure for media (hmp) structures.
  */
 hammer2_pfs_t *
-hammer2_pfsalloc(hammer2_chain_t *chain, const hammer2_inode_data_t *ripdata,
-    hammer2_dev_t *force_local)
+hammer2_pfsalloc(hammer2_chain_t *chain,
+		 const hammer2_inode_data_t *ripdata,
+		 hammer2_dev_t *force_local)
 {
 	hammer2_pfs_t *pmp = NULL;
 	hammer2_inode_t *iroot;
@@ -422,6 +423,7 @@ hammer2_pfsdealloc(hammer2_pfs_t *pmp, int clindex, int destroying __unused)
 		chain = iroot->cluster.array[clindex].chain;
 		iroot->cluster.array[clindex].chain = NULL;
 		pmp->pfs_types[clindex] = HAMMER2_PFSTYPE_NONE;
+
 		hammer2_mtx_unlock(&iroot->lock);
 
 		/* Release the chain. */
@@ -779,6 +781,7 @@ hammer2_mount(struct mount *mp, const char *path, void *data,
 next_hmp:
 			continue;
 		}
+
 		/*
 		 * If no match this may be a fresh H2 mount, make sure
 		 * the device is not mounted on anything else.
@@ -864,7 +867,7 @@ next_hmp:
 		hammer2_lk_init(&hmp->bflk, "h2bflk");
 
 		/*
-		 * vchain setup.  vchain.data is embedded.
+		 * vchain setup. vchain.data is embedded.
 		 * vchain.refs is initialized and will never drop to 0.
 		 */
 		hmp->vchain.hmp = hmp;
@@ -890,16 +893,15 @@ next_hmp:
 		hmp->fchain.bref.type = HAMMER2_BREF_TYPE_FREEMAP;
 		hmp->fchain.bref.data_off = 0 | HAMMER2_PBUFRADIX;
 		hmp->fchain.bref.methods =
-		    HAMMER2_ENC_CHECK(HAMMER2_CHECK_FREEMAP) |
-		    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE);
+			HAMMER2_ENC_CHECK(HAMMER2_CHECK_FREEMAP) |
+			HAMMER2_ENC_COMP(HAMMER2_COMP_NONE);
 		hammer2_chain_init(&hmp->fchain);
 
 		/* Initialize volume header related fields. */
 		KKASSERT(hmp->voldata.magic == HAMMER2_VOLUME_ID_HBO ||
-		    hmp->voldata.magic == HAMMER2_VOLUME_ID_ABO);
+			 hmp->voldata.magic == HAMMER2_VOLUME_ID_ABO);
 		hmp->volsync = hmp->voldata;
 		hmp->free_reserved = hmp->voldata.allocator_size / 20;
-
 		/*
 		 * Must use hmp instead of volume header for these two
 		 * in order to handle volume versions transparently.
@@ -950,7 +952,8 @@ next_hmp:
 		 */
 		parent = hammer2_chain_lookup_init(&hmp->vchain, 0);
 		schain = hammer2_chain_lookup(&parent, &key_dummy,
-		    HAMMER2_SROOT_KEY, HAMMER2_SROOT_KEY, &error, 0);
+				      HAMMER2_SROOT_KEY, HAMMER2_SROOT_KEY,
+				      &error, 0);
 		hammer2_chain_lookup_done(parent);
 		if (schain == NULL) {
 			hprintf("invalid super-root\n");
@@ -1075,14 +1078,17 @@ next_hmp:
 	hammer2_inode_lock(spmp->iroot, 0);
 	parent = hammer2_inode_chain(spmp->iroot, 0, HAMMER2_RESOLVE_ALWAYS);
 	lhc = hammer2_dirhash(label, strlen(label));
-	chain = hammer2_chain_lookup(&parent, &key_next, lhc,
-	    lhc + HAMMER2_DIRHASH_LOMASK, &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     lhc, lhc + HAMMER2_DIRHASH_LOMASK,
+				     &error, 0);
 	while (chain) {
 		if (chain->bref.type == HAMMER2_BREF_TYPE_INODE &&
 		    strcmp(label, (char *)chain->data->ipdata.filename) == 0)
 			break;
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					    key_next,lhc + HAMMER2_DIRHASH_LOMASK,&error, 0);
+					    key_next,
+					    lhc + HAMMER2_DIRHASH_LOMASK,
+					    &error, 0);
 	}
 	if (parent) {
 		hammer2_chain_unlock(parent);
@@ -1294,7 +1300,8 @@ hammer2_mountroot(void)
 /*
  * Scan PFSs under the super-root and create hammer2_pfs structures.
  */
-static void
+static
+void
 hammer2_update_pmps(hammer2_dev_t *hmp)
 {
 	hammer2_dev_t *force_local;
@@ -1315,21 +1322,23 @@ hammer2_update_pmps(hammer2_dev_t *hmp)
 	spmp = hmp->spmp;
 	hammer2_inode_lock(spmp->iroot, 0);
 	parent = hammer2_inode_chain(spmp->iroot, 0, HAMMER2_RESOLVE_ALWAYS);
-	chain = hammer2_chain_lookup(&parent, &key_next, HAMMER2_KEY_MIN,
-	    HAMMER2_KEY_MAX, &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+					 HAMMER2_KEY_MIN, HAMMER2_KEY_MAX,
+					 &error, 0);
 	while (chain) {
 		if (chain->error) {
 			hprintf("chain error %08x reading PFS root\n",
 			    chain->error);
 		} else if (chain->bref.type != HAMMER2_BREF_TYPE_INODE) {
 			hprintf("non inode chain type %d under super-root\n",
-			    chain->bref.type);
+				chain->bref.type);
 		} else {
 			ripdata = &chain->data->ipdata;
 			hammer2_pfsalloc(chain, ripdata, force_local);
 		}
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next, HAMMER2_KEY_MAX, &error, 0);
+					   key_next, HAMMER2_KEY_MAX,
+					   &error, 0);
 	}
 	if (parent) {
 		hammer2_chain_unlock(parent);
@@ -1346,7 +1355,7 @@ hammer2_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	/* Still NULL during mount before hammer2_mount_helper() called. */
 	if (pmp == NULL)
-		return (0);
+		return(0);
 
 	hammer2_lk_ex(&hammer2_mntlk);
 
@@ -1385,7 +1394,8 @@ failed:
  *
  * We must bump the mount_count on related devices for any mounted PFSs.
  */
-static void
+static
+void
 hammer2_mount_helper(struct mount *mp, hammer2_pfs_t *pmp)
 {
 	hammer2_cluster_t *cluster;
@@ -1425,7 +1435,8 @@ hammer2_mount_helper(struct mount *mp, hammer2_pfs_t *pmp)
  * accounting for the devices backing the pmp which is now undergoing an
  * unmount.
  */
-static void
+static
+void
 hammer2_unmount_helper(struct mount *mp, hammer2_pfs_t *pmp, hammer2_dev_t *hmp)
 {
 	hammer2_cluster_t *cluster;
@@ -1501,8 +1512,8 @@ again:
 
 	if (hmp->fchain.flags & HAMMER2_CHAIN_FLUSH_MASK) {
 		hammer2_voldata_modify(hmp);
-		hammer2_flush(&hmp->fchain,
-		    HAMMER2_FLUSH_TOP | HAMMER2_FLUSH_ALL);
+		hammer2_flush(&hmp->fchain, HAMMER2_FLUSH_TOP |
+					    HAMMER2_FLUSH_ALL);
 	}
 	hammer2_chain_unlock(&hmp->fchain);
 
@@ -1520,6 +1531,7 @@ again:
 	}
 
 	hammer2_pfsfree_scan(hmp, 1);
+
 	KKASSERT(hmp->spmp == NULL);
 
 	/* Finish up with the device vnode. */
@@ -1551,6 +1563,7 @@ again:
 	hammer2_dump_chain(&hmp->vchain, 0, 0, -1, 'v');
 	hammer2_dump_chain(&hmp->fchain, 0, 0, -1, 'f');
 #endif
+
 	/*
 	 * Final drop of embedded volume/freemap root chain to clean up
 	 * [vf]chain.core ([vf]chain structure is not flagged ALLOCATED so
@@ -1617,8 +1630,8 @@ TAILQ_HEAD(hammer2_recovery_list, hammer2_recovery_elm);
 
 struct hammer2_recovery_info {
 	struct hammer2_recovery_list list;
-	hammer2_tid_t mtid;
-	int depth;
+	hammer2_tid_t	mtid;
+	int	depth;
 };
 
 static int hammer2_recovery_scan(hammer2_dev_t *, hammer2_chain_t *,
@@ -1626,13 +1639,15 @@ static int hammer2_recovery_scan(hammer2_dev_t *, hammer2_chain_t *,
 
 #define HAMMER2_RECOVERY_MAXDEPTH	10
 
-static int
+static
+int
 hammer2_recovery(hammer2_dev_t *hmp)
 {
 	struct hammer2_recovery_info info;
 	struct hammer2_recovery_elm *elm;
 	hammer2_chain_t *parent;
-	hammer2_tid_t sync_tid, mirror_tid;
+	hammer2_tid_t sync_tid;
+	hammer2_tid_t mirror_tid;
 	int error;
 
 	hammer2_trans_init(hmp->spmp, 0);
@@ -1660,9 +1675,9 @@ hammer2_recovery(hammer2_dev_t *hmp)
 
 		hammer2_chain_lock(parent, HAMMER2_RESOLVE_ALWAYS);
 		error |= hammer2_recovery_scan(hmp, parent, &info,
-		    hmp->voldata.freemap_tid);
+					      hmp->voldata.freemap_tid);
 		hammer2_chain_unlock(parent);
-		hammer2_chain_drop(parent); /* drop elm->chain ref */
+		hammer2_chain_drop(parent);	/* drop elm->chain ref */
 	}
 
 	hammer2_trans_done(hmp->spmp, 0);
@@ -1670,9 +1685,11 @@ hammer2_recovery(hammer2_dev_t *hmp)
 	return (error);
 }
 
-static int
+static
+int
 hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
-    struct hammer2_recovery_info *info, hammer2_tid_t sync_tid)
+		      struct hammer2_recovery_info *info,
+		      hammer2_tid_t sync_tid)
 {
 	hammer2_chain_t *chain;
 	hammer2_blockref_t bref;
@@ -1686,7 +1703,7 @@ hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
 		    HAMMER2_FREEMAP_DORECOVER);
 
 	/* Check type for recursive scan. */
-	switch (parent->bref.type) {
+	switch(parent->bref.type) {
 	case HAMMER2_BREF_TYPE_VOLUME:
 		/* data already instantiated */
 		break;
@@ -1729,8 +1746,10 @@ hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
 		hammer2_chain_ref(parent);
 		TAILQ_INSERT_TAIL(&info->list, elm, entry);
 		/* unlocked by caller */
-		return (0);
+
+		return(0);
 	}
+
 
 	/*
 	 * Recursive scan of the last flushed transaction only.  We are
@@ -1747,8 +1766,9 @@ hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
 	error = 0;
 
 	for (;;) {
-		error |= hammer2_chain_scan(parent, &chain, &bref, &first,
-		    HAMMER2_LOOKUP_NODATA);
+		error |= hammer2_chain_scan(parent, &chain, &bref,
+					    &first,
+					    HAMMER2_LOOKUP_NODATA);
 		/* Problem during scan or EOF. */
 		if (error)
 			break;
@@ -1765,8 +1785,8 @@ hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
 		atomic_set_int(&chain->flags, HAMMER2_CHAIN_RELEASE);
 		if (bref.mirror_tid > sync_tid) {
 			++info->depth;
-			tmp_error = hammer2_recovery_scan(hmp, chain, info,
-			    sync_tid);
+			tmp_error = hammer2_recovery_scan(hmp, chain,
+							   info, sync_tid);
 			--info->depth;
 		} else {
 			tmp_error = 0;
@@ -1791,11 +1811,13 @@ hammer2_recovery_scan(hammer2_dev_t *hmp, hammer2_chain_t *parent,
  * moving a PFS inode into an indirect block wound up causing the
  * HAMMER2_BREF_FLAG_PFSROOT flag in the bref to get cleared.
  */
-static int
+static
+int
 hammer2_fixup_pfses(hammer2_dev_t *hmp)
 {
 	const hammer2_inode_data_t *ripdata;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	hammer2_pfs_t *spmp;
 	int error = 0, error2;
@@ -1809,9 +1831,9 @@ hammer2_fixup_pfses(hammer2_dev_t *hmp)
 	spmp = hmp->spmp;
 	hammer2_inode_lock(spmp->iroot, 0);
 	parent = hammer2_inode_chain(spmp->iroot, 0, HAMMER2_RESOLVE_ALWAYS);
-	chain = hammer2_chain_lookup(&parent, &key_next, HAMMER2_KEY_MIN,
-	    HAMMER2_KEY_MAX, &error, 0);
-
+	chain = hammer2_chain_lookup(&parent, &key_next,
+					 HAMMER2_KEY_MIN, HAMMER2_KEY_MAX,
+					 &error, 0);
 	while (chain) {
 		if (chain->bref.type != HAMMER2_BREF_TYPE_INODE)
 			continue;
@@ -1822,22 +1844,23 @@ hammer2_fixup_pfses(hammer2_dev_t *hmp)
 			ripdata = &chain->data->ipdata;
 			hammer2_trans_init(hmp->spmp, 0);
 			error2 = hammer2_chain_modify(chain,
-			    chain->bref.modify_tid, 0, 0);
+						      chain->bref.modify_tid,
+						      0, 0);
 			if (error2 == 0) {
 				hprintf("correct mis-flagged PFS %s\n",
-				    ripdata->filename);
+					ripdata->filename);
 				chain->bref.flags |= HAMMER2_BREF_FLAG_PFSROOT;
 			} else {
 				error |= error2;
 			}
-			hammer2_flush(chain,
-			    HAMMER2_FLUSH_TOP | HAMMER2_FLUSH_ALL);
+			hammer2_flush(chain, HAMMER2_FLUSH_TOP |
+					     HAMMER2_FLUSH_ALL);
 			hammer2_trans_done(hmp->spmp, 0);
 		}
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next, HAMMER2_KEY_MAX, &error, 0);
+					   key_next, HAMMER2_KEY_MAX,
+					   &error, 0);
 	}
-
 	if (parent) {
 		hammer2_chain_unlock(parent);
 		hammer2_chain_drop(parent);
@@ -1909,7 +1932,8 @@ int
 hammer2_vfs_sync_pmp(hammer2_pfs_t *pmp, int waitfor __unused)
 {
 	hammer2_inode_t *ip;
-	hammer2_depend_t *depend, *depend_next;
+	hammer2_depend_t *depend;
+	hammer2_depend_t *depend_next;
 	struct vnode *vp;
 	uint32_t pass2;
 	int error, dorestart, ndrop;
@@ -1991,9 +2015,11 @@ restart:
 		 */
 		pass2 = ip->flags;
 		cpu_ccfence();
-		if (atomic_cmpset_int(&ip->flags, pass2,
-		    (pass2 & ~(HAMMER2_INODE_SYNCQ | HAMMER2_INODE_SYNCQ_WAKEUP)) |
-		    HAMMER2_INODE_SYNCQ_PASS2) == 0)
+		if (atomic_cmpset_int(&ip->flags,
+			      pass2,
+			      (pass2 & ~(HAMMER2_INODE_SYNCQ |
+					 HAMMER2_INODE_SYNCQ_WAKEUP)) |
+			      HAMMER2_INODE_SYNCQ_PASS2) == 0)
 			continue;
 		TAILQ_REMOVE(&pmp->syncq, ip, entry);
 		--pmp->sideq_count;
@@ -2037,7 +2063,7 @@ restart:
 		 */
 		vp = ip->vp; /* NULL after vflush() */
 		if (vp) {
-			if (vget(vp, LK_EXCLUSIVE | LK_NOWAIT)) {
+			if (vget(vp, LK_EXCLUSIVE|LK_NOWAIT)) {
 				/*
 				 * Failed to get the vnode, requeue the inode
 				 * (PASS2 is already set so it will be found
@@ -2143,7 +2169,7 @@ restart:
 		    !!(ip->flags & HAMMER2_INODE_DIRTYDATA));
 		if (vp) {
 			if ((ip->flags & (HAMMER2_INODE_MODIFIED |
-			    HAMMER2_INODE_RESIZED |
+					  HAMMER2_INODE_RESIZED |
 			    HAMMER2_INODE_DIRTYDATA)) == 0) {
 				/*
 				 * DragonFly uses DragonFly's vsyncscan specific
@@ -2162,10 +2188,10 @@ restart:
 				vgone(vp);
 			}
 			*/
-			vp = NULL; /* safety */
+			vp = NULL;	/* safety */
 		}
 		atomic_clear_int(&ip->flags, HAMMER2_INODE_SYNCQ_PASS2);
-		hammer2_inode_unlock(ip); /* unlock+drop */
+		hammer2_inode_unlock(ip);	/* unlock+drop */
 		/* ip pointer invalid */
 
 		/*
@@ -2207,16 +2233,16 @@ restart:
 		hammer2_inode_ref(ip);
 		hammer2_mtx_ex(&ip->lock);
 		hammer2_inode_chain_sync(ip);
-		hammer2_inode_chain_flush(ip,
-		    HAMMER2_XOP_INODE_STOP | HAMMER2_XOP_FSSYNC |
-		    HAMMER2_XOP_VOLHDR);
-		hammer2_inode_unlock(ip); /* unlock+drop */
+		hammer2_inode_chain_flush(ip, HAMMER2_XOP_INODE_STOP |
+					      HAMMER2_XOP_FSSYNC |
+					      HAMMER2_XOP_VOLHDR);
+		hammer2_inode_unlock(ip);	/* unlock+drop */
 	}
 	debug_hprintf("FILESYSTEM SYNC STAGE 2 DONE\n");
 
 	hammer2_bioq_sync(pmp);
 
-	error = 0; /* XXX */
+	error = 0;	/* XXX */
 	hammer2_trans_done(pmp, HAMMER2_TRANS_ISFLUSH);
 
 	return (error);
@@ -2727,6 +2753,7 @@ hammer2_vfs_enospace(hammer2_inode_t *ip, off_t bytes, struct ucred *cred)
 			if (pmp->pfs_types[i] != HAMMER2_PFSTYPE_MASTER &&
 			    pmp->pfs_types[i] != HAMMER2_PFSTYPE_SOFT_MASTER)
 				continue;
+
 			if (free_nominal > hmp->voldata.allocator_free)
 				free_nominal = hmp->voldata.allocator_free;
 			if (free_reserved < hmp->free_reserved)
@@ -2740,7 +2767,6 @@ hammer2_vfs_enospace(hammer2_inode_t *ip, off_t bytes, struct ucred *cred)
 		free_reserved = pmp->free_reserved;
 		free_nominal = pmp->free_nominal;
 	}
-
 	if (cred && cred->cr_uid != 0) {
 		if ((int64_t)(free_nominal - bytes) < (int64_t)free_reserved)
 			return (2);

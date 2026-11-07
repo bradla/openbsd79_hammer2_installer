@@ -135,7 +135,6 @@ hammer2_vop_bmap_impl(struct vop_bmap_args_hammer2 *ap)
  * from reading-ahead, it simply prevents it from trying form a single
  * cluster buffer for the logical request.  H2 already uses 64KB buffers!
  */
- 
 int
 hammer2_vop_bmap(struct vop_bmap_args_hammer2 *ap)
 {
@@ -171,14 +170,15 @@ hammer2_decompress_LZ4_callback(const char *data, unsigned int bytes,
 	compressed_buffer = hmalloc(HAMMER2_PBUFSIZE, M_HAMMER2_RBUF,
 	    M_WAITOK | M_ZERO);
 	result = LZ4_decompress_safe(__DECONST(char *, &data[sizeof(int)]),
-	    compressed_buffer, compressed_size, bp->b_bufsize);
+				     compressed_buffer,
+				     compressed_size,
+				     bp->b_bufsize);
 	if (result < 0) {
 		hprintf("error during decompression: buf %016llx/%016llx/%d\n",
 		    (long long)bp->b_lblkno, (long long)bp->b_blkno, bytes);
 		/* Make sure it isn't random garbage. */
 		bzero(compressed_buffer, bp->b_bufsize);
 	}
-
 	KKASSERT(result <= bp->b_bufsize);
 	bcopy(compressed_buffer, bp->b_data, bp->b_bufsize);
 	if (result < bp->b_bufsize)
@@ -234,7 +234,8 @@ hammer2_decompress_ZLIB_callback(const char *data, unsigned int bytes,
 /*
  * Logical buffer I/O.
  */
-static int
+static
+int
 hammer2_strategy_read(struct vop_strategy_args *ap)
 {
 	hammer2_xop_strategy_t *xop;
@@ -260,7 +261,7 @@ hammer2_strategy_read(struct vop_strategy_args *ap)
 	 * read at nchains>1 (bio never completed -> cat stuck in biowait).
 	 */
 
-	return (0);
+	return(0);
 }
 
 /*
@@ -278,10 +279,14 @@ hammer2_xop_strategy_read(hammer2_xop_t *arg, void *scratch, int clindex)
 	int s, error;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS | HAMMER2_RESOLVE_SHARED);
+				     HAMMER2_RESOLVE_ALWAYS |
+				     HAMMER2_RESOLVE_SHARED);
 	if (parent) {
-		chain = hammer2_chain_lookup(&parent, &key_dummy, lbase, lbase,
-		    &error, HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+		chain = hammer2_chain_lookup(&parent, &key_dummy,
+					     lbase, lbase,
+					     &error,
+					     HAMMER2_LOOKUP_ALWAYS |
+					     HAMMER2_LOOKUP_SHARED);
 		if (chain)
 			error = chain->error;
 	} else {
@@ -297,8 +302,8 @@ hammer2_xop_strategy_read(hammer2_xop_t *arg, void *scratch, int clindex)
 		hammer2_chain_unlock(parent);
 		hammer2_chain_drop(parent);
 	}
-	chain = NULL; /* safety */
-	parent = NULL; /* safety */
+	chain = NULL;	/* safety */
+	parent = NULL;	/* safety */
 
 	/*
 	 * Race to finish the frontend.  This is an async read -- the bio is
@@ -355,7 +360,8 @@ hammer2_xop_strategy_read(hammer2_xop_t *arg, void *scratch, int clindex)
 	hammer2_xop_retire(&xop->head, HAMMER2_XOPMASK_VOP);
 }
 
-static void
+static
+void
 hammer2_strategy_read_completion(hammer2_chain_t *focus, const char *data,
     struct buf *bp)
 {
@@ -364,7 +370,7 @@ hammer2_strategy_read_completion(hammer2_chain_t *focus, const char *data,
 		bcopy(((const hammer2_inode_data_t *)data)->u.data, bp->b_data,
 		    HAMMER2_EMBEDDED_BYTES);
 		bzero(bp->b_data + HAMMER2_EMBEDDED_BYTES,
-		    bp->b_bcount - HAMMER2_EMBEDDED_BYTES);
+		      bp->b_bcount - HAMMER2_EMBEDDED_BYTES);
 		bp->b_resid = 0;
 		bp->b_error = 0;
 	} else if (focus->bref.type == HAMMER2_BREF_TYPE_DATA) {
@@ -437,8 +443,8 @@ hammer2_strategy_write(struct vop_strategy_args *ap)
 	hammer2_trans_assert_strategy(pmp);
 	hammer2_trans_init(pmp, HAMMER2_TRANS_BUFCACHE);
 
-	xop = hammer2_xop_alloc(ip,
-	    HAMMER2_XOP_MODIFYING | HAMMER2_XOP_STRATEGY);
+	xop = hammer2_xop_alloc(ip, HAMMER2_XOP_MODIFYING |
+				    HAMMER2_XOP_STRATEGY);
 	xop->finished = 0;
 	hammer2_mtx_init(&xop->lock, "h2swr");
 	xop->bp = bp;
@@ -452,7 +458,7 @@ hammer2_strategy_write(struct vop_strategy_args *ap)
 	 * buffer, which wedged the syncer's vflushbuf at nchains>1.
 	 */
 
-	return (0);
+	return(0);
 }
 
 void
@@ -481,17 +487,19 @@ hammer2_xop_strategy_write(hammer2_xop_t *arg, void *scratch, int clindex)
 	pblksize = hammer2_calc_physical(ip, lbase);
 	KKASSERT(lblksize <= MAXPHYS);
 	bcopy(bp->b_data, bio_data, lblksize);
+
 	hammer2_mtx_unlock(&xop->lock);
-	bp = NULL; /* safety, illegal to access after unlock */
+	bp = NULL;	/* safety, illegal to access after unlock */
 
 	/* Write this cluster node's copy of the data. */
 	parent = hammer2_inode_chain(ip, clindex, HAMMER2_RESOLVE_ALWAYS);
-	hammer2_write_file_core(bio_data, ip, &parent, lbase, IO_ASYNC,
-	    pblksize, xop->head.mtid, &error);
+	hammer2_write_file_core(bio_data, ip, &parent,
+				lbase, IO_ASYNC, pblksize,
+				xop->head.mtid, &error);
 	if (parent) {
 		hammer2_chain_unlock(parent);
 		hammer2_chain_drop(parent);
-		parent = NULL; /* safety */
+		parent = NULL;	/* safety */
 	}
 	hammer2_xop_feed(&xop->head, NULL, clindex, error);
 	/* silenced per-write debug */ (void)error;
@@ -565,10 +573,11 @@ hammer2_bioq_sync(hammer2_pfs_t *pmp)
  *
  * NOTE: Special case for data embedded in inode.
  */
-static hammer2_chain_t *
+static
+hammer2_chain_t *
 hammer2_assign_physical(hammer2_inode_t *ip, hammer2_chain_t **parentp,
-    hammer2_key_t lbase, int pblksize, hammer2_tid_t mtid, char **datap,
-    int *errorp)
+			hammer2_key_t lbase, int pblksize,
+			hammer2_tid_t mtid, char **datap, int *errorp)
 {
 	hammer2_chain_t *chain;
 	hammer2_key_t key_dummy;
@@ -585,7 +594,8 @@ hammer2_assign_physical(hammer2_inode_t *ip, hammer2_chain_t **parentp,
 	 * logical buffer cache buffer.
 	 */
 	chain = hammer2_chain_lookup(parentp, &key_dummy, lbase, lbase, errorp,
-	    HAMMER2_LOOKUP_NODATA);
+				     HAMMER2_LOOKUP_NODATA);
+
 	/*
 	 * The lookup code should not return a DELETED chain to us, unless
 	 * its a short-file embedded in the inode.  Then it is possible for
@@ -607,12 +617,14 @@ hammer2_assign_physical(hammer2_inode_t *ip, hammer2_chain_t **parentp,
 		 *	 store (nor do we want any).
 		 */
 		dedup_off = hammer2_dedup_lookup((*parentp)->hmp, datap,
-		    pblksize);
+						 pblksize);
 		*errorp |= hammer2_chain_create(parentp, &chain, NULL, ip->pmp,
-		    HAMMER2_ENC_CHECK(ip->meta.check_algo) |
-		    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE), lbase,
-		    HAMMER2_PBUFRADIX, HAMMER2_BREF_TYPE_DATA, pblksize, mtid,
-		    dedup_off, 0);
+				       HAMMER2_ENC_CHECK(ip->meta.check_algo) |
+				       HAMMER2_ENC_COMP(HAMMER2_COMP_NONE),
+					        lbase, HAMMER2_PBUFRADIX,
+					        HAMMER2_BREF_TYPE_DATA,
+					        pblksize, mtid,
+					        dedup_off, 0);
 		if (chain == NULL)
 			goto failed;
 	} else if (chain->error == 0) {
@@ -626,13 +638,14 @@ hammer2_assign_physical(hammer2_inode_t *ip, hammer2_chain_t **parentp,
 			break;
 		case HAMMER2_BREF_TYPE_DATA:
 			dedup_off = hammer2_dedup_lookup(chain->hmp, datap,
-			    pblksize);
+							 pblksize);
 			if (chain->bytes != (unsigned int)pblksize) {
 				*errorp |= hammer2_chain_resize(chain, mtid,
 				    dedup_off, pradix, HAMMER2_MODIFY_OPTDATA);
 				if (*errorp)
 					break;
 			}
+
 			/*
 			 * DATA buffers must be marked modified whether the
 			 * data is in a logical buffer or not.  We also have
@@ -641,7 +654,7 @@ hammer2_assign_physical(hammer2_inode_t *ip, hammer2_chain_t **parentp,
 			 * compressed buffer.
 			 */
 			*errorp |= hammer2_chain_modify(chain, mtid, dedup_off,
-			    HAMMER2_MODIFY_OPTDATA);
+						        HAMMER2_MODIFY_OPTDATA);
 			break;
 		default:
 			hpanic("bad blockref type %d", chain->bref.type);
@@ -661,10 +674,12 @@ failed:
  * related chains so we can calculate and set the check data for
  * the blockref.
  */
-static void
+static
+void
 hammer2_write_file_core(char *data, hammer2_inode_t *ip,
-    hammer2_chain_t **parentp, hammer2_key_t lbase, int ioflag, int pblksize,
-    hammer2_tid_t mtid, int *errorp)
+			hammer2_chain_t **parentp,
+			hammer2_key_t lbase, int ioflag, int pblksize,
+			hammer2_tid_t mtid, int *errorp)
 {
 	hammer2_chain_t *chain;
 	hammer2_inode_data_t *wipdata;
@@ -672,7 +687,7 @@ hammer2_write_file_core(char *data, hammer2_inode_t *ip,
 
 	*errorp = 0;
 
-	switch (HAMMER2_DEC_ALGO(ip->meta.comp_algo)) {
+	switch(HAMMER2_DEC_ALGO(ip->meta.comp_algo)) {
 	case HAMMER2_COMP_NONE:
 		/*
 		 * We have to assign physical storage to the buffer
@@ -684,24 +699,24 @@ hammer2_write_file_core(char *data, hammer2_inode_t *ip,
 		 */
 		bdata = data;
 		chain = hammer2_assign_physical(ip, parentp, lbase, pblksize,
-		    mtid, &bdata, errorp);
+						mtid, &bdata, errorp);
 		if (*errorp) {
 			/* Skip modifications. */
 		} else if (chain->bref.type == HAMMER2_BREF_TYPE_INODE) {
 			wipdata = &chain->data->ipdata;
 			KKASSERT(wipdata->meta.op_flags &
-			    HAMMER2_OPFLAG_DIRECTDATA);
+				 HAMMER2_OPFLAG_DIRECTDATA);
 			bcopy(data, wipdata->u.data, HAMMER2_EMBEDDED_BYTES);
 		} else if (bdata == NULL) {
 			/* Copy of data already present on-media. */
 			chain->bref.methods =
-			    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
-			    HAMMER2_ENC_CHECK(ip->meta.check_algo);
+				HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
+				HAMMER2_ENC_CHECK(ip->meta.check_algo);
 			hammer2_chain_setcheck(chain, data);
 			atomic_clear_int(&chain->flags, HAMMER2_CHAIN_INITIAL);
 		} else {
-			hammer2_write_bp(chain, data, ioflag, pblksize, mtid,
-			    errorp, ip->meta.check_algo);
+			hammer2_write_bp(chain, data, ioflag, pblksize,
+					 mtid, errorp, ip->meta.check_algo);
 		}
 		if (chain) {
 			hammer2_chain_unlock(chain);
@@ -719,7 +734,7 @@ hammer2_write_file_core(char *data, hammer2_inode_t *ip,
 		/* Check for zero-fill and attempt compression. */
 		hammer2_compress_and_write(data, ip, parentp, lbase, ioflag,
 		    pblksize, mtid, errorp, ip->meta.comp_algo,
-		    ip->meta.check_algo);
+					   ip->meta.check_algo);
 		break;
 	}
 }
@@ -729,10 +744,12 @@ hammer2_write_file_core(char *data, hammer2_inode_t *ip,
  * write path. The compression algorithm is determined by the settings
  * obtained from inode.
  */
-static void
+static
+void
 hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
-    hammer2_chain_t **parentp, hammer2_key_t lbase, int ioflag, int pblksize,
-    hammer2_tid_t mtid, int *errorp, int comp_algo, int check_algo)
+	hammer2_chain_t **parentp,
+	hammer2_key_t lbase, int ioflag, int pblksize,
+	hammer2_tid_t mtid, int *errorp, int comp_algo, int check_algo)
 {
 	hammer2_chain_t *chain;
 	hammer2_inode_data_t *wipdata;
@@ -772,7 +789,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 
 	if (ip->comp_heuristic < 8 || (ip->comp_heuristic & 7) == 0 ||
 	    hammer2_always_compress) {
-		switch (HAMMER2_DEC_ALGO(comp_algo)) {
+		switch(HAMMER2_DEC_ALGO(comp_algo)) {
 		case HAMMER2_COMP_LZ4:
 			/*
 			 * We need to prefix with the size, LZ4
@@ -788,7 +805,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 			    M_WAITOK | M_ZERO);
 			comp_size = LZ4_compress_limitedOutput(data,
 			    &comp_buffer[sizeof(int)], pblksize,
-			    pblksize / 2 - sizeof(int64_t));
+					pblksize / 2 - sizeof(int64_t));
 			*(int *)comp_buffer = comp_size;
 			if (comp_size)
 				comp_size += sizeof(int);
@@ -796,7 +813,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 		case HAMMER2_COMP_ZLIB:
 			comp_level = HAMMER2_DEC_LEVEL(comp_algo);
 			if (comp_level == 0)
-				comp_level = 6; /* default zlib compression */
+				comp_level = 6;	/* default zlib compression */
 			else if (comp_level < 6)
 				comp_level = 6;
 			else if (comp_level > 9)
@@ -828,7 +845,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 
 	if (comp_size == 0) {
 		/* Compression failed or turned off. */
-		comp_block_size = pblksize; /* safety */
+		comp_block_size = pblksize;	/* safety */
 		if (++ip->comp_heuristic > 128)
 			ip->comp_heuristic = 8;
 	} else {
@@ -850,6 +867,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 			hpanic("weird comp_size value");
 			/* NOT REACHED */
 		}
+
 		/*
 		 * Must zero the remainder or dedup (which operates on a
 		 * physical block basis) will not find matches.
@@ -865,7 +883,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 	 */
 	bdata = comp_size ? comp_buffer : data;
 	chain = hammer2_assign_physical(ip, parentp, lbase, comp_block_size,
-	    mtid, &bdata, errorp);
+					mtid, &bdata, errorp);
 	if (*errorp)
 		goto done;
 	if (chain->bref.type == HAMMER2_BREF_TYPE_INODE) {
@@ -873,7 +891,7 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 		if (*errorp == 0) {
 			wipdata = &chain->data->ipdata;
 			KKASSERT(wipdata->meta.op_flags &
-			    HAMMER2_OPFLAG_DIRECTDATA);
+				 HAMMER2_OPFLAG_DIRECTDATA);
 			bcopy(data, wipdata->u.data, HAMMER2_EMBEDDED_BYTES);
 		}
 	} else if (bdata == NULL) {
@@ -894,7 +912,8 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 		atomic_clear_int(&chain->flags, HAMMER2_CHAIN_INITIAL);
 	} else {
 		KKASSERT(chain->flags & HAMMER2_CHAIN_MODIFIED);
-		switch (chain->bref.type) {
+
+		switch(chain->bref.type) {
 		case HAMMER2_BREF_TYPE_INODE:
 			hpanic("unexpected inode");
 			break;
@@ -908,27 +927,31 @@ hammer2_compress_and_write(char *data, hammer2_inode_t *ip,
 				break;
 			}
 			bdata = hammer2_io_data(dio, chain->bref.data_off);
+
 			/*
 			 * When loading the block make sure we don't
 			 * leave garbage after the compressed data.
 			 */
 			if (comp_size) {
 				chain->bref.methods =
-				    HAMMER2_ENC_COMP(comp_algo) +
-				    HAMMER2_ENC_CHECK(check_algo);
+					HAMMER2_ENC_COMP(comp_algo) +
+					HAMMER2_ENC_CHECK(check_algo);
 				bcopy(comp_buffer, bdata, comp_block_size);
 			} else {
 				chain->bref.methods =
-				    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
-				    HAMMER2_ENC_CHECK(check_algo);
+					HAMMER2_ENC_COMP(
+						HAMMER2_COMP_NONE) +
+					HAMMER2_ENC_CHECK(check_algo);
 				bcopy(data, bdata, pblksize);
 			}
+
 			/*
 			 * The flush code doesn't calculate check codes for
 			 * file data (doing so can result in excessive I/O),
 			 * so we do it here.
 			 */
 			hammer2_chain_setcheck(chain, bdata);
+
 			/*
 			 * Device buffer is now valid, chain is no longer in
 			 * the initial state.
@@ -963,10 +986,13 @@ done:
  * Function that performs zero-checking and writing without compression,
  * it corresponds to default zero-checking path.
  */
-static void
+static
+void
 hammer2_zero_check_and_write(char *data, hammer2_inode_t *ip,
-    hammer2_chain_t **parentp, hammer2_key_t lbase, int ioflag, int pblksize,
-    hammer2_tid_t mtid, int *errorp, int check_algo)
+	hammer2_chain_t **parentp,
+	hammer2_key_t lbase, int ioflag, int pblksize,
+	hammer2_tid_t mtid, int *errorp,
+	int check_algo)
 {
 	hammer2_chain_t *chain;
 	char *bdata;
@@ -986,17 +1012,17 @@ hammer2_zero_check_and_write(char *data, hammer2_inode_t *ip,
 		/* Normal write (bdata set to NULL if de-duplicated). */
 		bdata = data;
 		chain = hammer2_assign_physical(ip, parentp, lbase, pblksize,
-		    mtid, &bdata, errorp);
+						mtid, &bdata, errorp);
 		if (*errorp) {
 			/* Do nothing. */
 		} else if (bdata) {
-			hammer2_write_bp(chain, data, ioflag, pblksize, mtid,
-			    errorp, check_algo);
+			hammer2_write_bp(chain, data, ioflag, pblksize,
+					 mtid, errorp, check_algo);
 		} else {
 			/* Dedup occurred. */
 			chain->bref.methods =
-			    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
-			    HAMMER2_ENC_CHECK(check_algo);
+				HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
+				HAMMER2_ENC_CHECK(check_algo);
 			hammer2_chain_setcheck(chain, data);
 			atomic_clear_int(&chain->flags, HAMMER2_CHAIN_INITIAL);
 		}
@@ -1011,7 +1037,8 @@ hammer2_zero_check_and_write(char *data, hammer2_inode_t *ip,
  * A function to test whether a block of data contains only zeros,
  * returns TRUE (non-zero) if the block is all zeros.
  */
-static int
+static
+int
 test_block_zeros(const char *buf, size_t bytes)
 {
 	size_t i;
@@ -1026,16 +1053,20 @@ test_block_zeros(const char *buf, size_t bytes)
 /*
  * Function to "write" a block that contains only zeros.
  */
-static void
-zero_write(char *data, hammer2_inode_t *ip, hammer2_chain_t **parentp,
-    hammer2_key_t lbase, hammer2_tid_t mtid, int *errorp)
+static
+void
+zero_write(char *data, hammer2_inode_t *ip,
+	   hammer2_chain_t **parentp,
+	   hammer2_key_t lbase, hammer2_tid_t mtid, int *errorp)
 {
 	hammer2_chain_t *chain;
 	hammer2_inode_data_t *wipdata;
 	hammer2_key_t key_dummy;
 
-	chain = hammer2_chain_lookup(parentp, &key_dummy, lbase, lbase, errorp,
-	    HAMMER2_LOOKUP_NODATA);
+	chain = hammer2_chain_lookup(parentp, &key_dummy,
+				     lbase, lbase,
+				     errorp,
+				     HAMMER2_LOOKUP_NODATA);
 	if (chain) {
 		if (chain->bref.type == HAMMER2_BREF_TYPE_INODE) {
 			if (*errorp == 0)
@@ -1044,7 +1075,7 @@ zero_write(char *data, hammer2_inode_t *ip, hammer2_chain_t **parentp,
 			if (*errorp == 0) {
 				wipdata = &chain->data->ipdata;
 				KKASSERT(wipdata->meta.op_flags &
-				    HAMMER2_OPFLAG_DIRECTDATA);
+					 HAMMER2_OPFLAG_DIRECTDATA);
 				bzero(wipdata->u.data, HAMMER2_EMBEDDED_BYTES);
 			}
 		} else {
@@ -1063,9 +1094,11 @@ zero_write(char *data, hammer2_inode_t *ip, hammer2_chain_t **parentp,
  * compression. This function is used in path without compression and
  * default zero-checking path.
  */
-static void
-hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag, int pblksize,
-    hammer2_tid_t mtid, int *errorp, int check_algo)
+static
+void
+hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag,
+		 int pblksize,
+		 hammer2_tid_t mtid, int *errorp, int check_algo)
 {
 	hammer2_inode_data_t *wipdata;
 	hammer2_io_t *dio;
@@ -1074,7 +1107,7 @@ hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag, int pblksize,
 
 	KKASSERT(chain->flags & HAMMER2_CHAIN_MODIFIED);
 
-	switch (chain->bref.type) {
+	switch(chain->bref.type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		wipdata = &chain->data->ipdata;
 		KKASSERT(wipdata->meta.op_flags & HAMMER2_OPFLAG_DIRECTDATA);
@@ -1082,8 +1115,10 @@ hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag, int pblksize,
 		error = 0;
 		break;
 	case HAMMER2_BREF_TYPE_DATA:
-		error = hammer2_io_newnz(chain->hmp, chain->bref.type,
-		    chain->bref.data_off, chain->bytes, &dio);
+		error = hammer2_io_newnz(chain->hmp,
+					 chain->bref.type,
+					 chain->bref.data_off,
+					 chain->bytes, &dio);
 		if (error) {
 			hammer2_io_bqrelse(&dio);
 			hprintf("getblk error %d\n", error);
@@ -1092,14 +1127,16 @@ hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag, int pblksize,
 		bdata = hammer2_io_data(dio, chain->bref.data_off);
 		chain->bref.methods =
 		    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE) +
-		    HAMMER2_ENC_CHECK(check_algo);
+				      HAMMER2_ENC_CHECK(check_algo);
 		bcopy(data, bdata, chain->bytes);
+
 		/*
 		 * The flush code doesn't calculate check codes for
 		 * file data (doing so can result in excessive I/O),
 		 * so we do it here.
 		 */
 		hammer2_chain_setcheck(chain, bdata);
+
 		/*
 		 * Device buffer is now valid, chain is no longer in
 		 * the initial state.
@@ -1141,7 +1178,7 @@ hammer2_write_bp(hammer2_chain_t *chain, char *data, int ioflag, int pblksize,
  */
 static void
 hammer2_dedup_record(hammer2_chain_t *chain, hammer2_io_t *dio,
-    const char *data)
+		     const char *data)
 {
 	hammer2_dev_t *hmp = chain->hmp;
 	hammer2_dedup_t *dedup;
@@ -1163,7 +1200,7 @@ hammer2_dedup_record(hammer2_chain_t *chain, hammer2_io_t *dio,
 	}
 	hammer2_mtx_assert_unlocked(&dio->lock);
 
-	switch (HAMMER2_DEC_CHECK(chain->bref.methods)) {
+	switch(HAMMER2_DEC_CHECK(chain->bref.methods)) {
 	case HAMMER2_CHECK_ISCSI32:
 		/*
 		 * XXX use the built-in crc (the dedup lookup sequencing
@@ -1207,7 +1244,6 @@ hammer2_dedup_record(hammer2_chain_t *chain, hammer2_io_t *dio,
 		if (dticks < 0 || dticks > hz * 60 * 30)
 			best = i;
 	}
-
 	dedup += best;
 	dedup->ticks = getticks();
 	dedup->data_off = chain->bref.data_off;
@@ -1228,7 +1264,8 @@ hammer2_dedup_record(hammer2_chain_t *chain, hammer2_io_t *dio,
 	hammer2_mtx_unlock(&dio->lock);
 }
 
-static hammer2_off_t
+static
+hammer2_off_t
 hammer2_dedup_lookup(hammer2_dev_t *hmp, char **datap, int pblksize)
 {
 	hammer2_dedup_t *dedup;

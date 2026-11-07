@@ -374,8 +374,8 @@ struct hammer2_chain {
 	hammer2_dev_t		*hmp;
 	hammer2_pfs_t		*pmp;		/* A PFS or super-root (spmp) */
 	//struct lock	diolk;			/* xop focus interlock */
-	hammer2_io_t		*dio;		/* physical data buffer */
-	hammer2_media_data_t	*data;		/* data pointer shortcut */
+	hammer2_io_t	*dio;			/* physical data buffer */
+	hammer2_media_data_t *data;		/* data pointer shortcut */
 	unsigned int		bytes;		/* physical data size */
 	unsigned int		flags;		/* for HAMMER2_CHAIN_xxx */
 	unsigned int		refs;
@@ -389,6 +389,7 @@ typedef struct hammer2_chain hammer2_chain_t;
 
 int hammer2_chain_cmp(const hammer2_chain_t *, const hammer2_chain_t *);
 RB_PROTOTYPE(hammer2_chain_tree, hammer2_chain, rbnode, hammer2_chain_cmp);
+
 /*
  * Passed to hammer2_chain_create(), causes methods to be inherited from
  * parent.
@@ -455,7 +456,7 @@ RB_PROTOTYPE(hammer2_chain_tree, hammer2_chain, rbnode, hammer2_chain_cmp);
  * All H2 error codes are flags and can be accumulated by ORing them
  * together.
  *
-  * IO		- An I/O error occurred
+ * IO		- An I/O error occurred
  * CHECK	- I/O succeeded but did not match the check code
  * INCOMPLETE	- A cluster is not complete enough to use, or
  *		  a chain cannot be loaded because its parent has an error. *
@@ -488,7 +489,7 @@ RB_PROTOTYPE(hammer2_chain_tree, hammer2_chain, rbnode, hammer2_chain_cmp);
 #define HAMMER2_ERROR_ETIMEDOUT		0x00040000
 
 /*
-* Flags passed to hammer2_chain_lookup() and hammer2_chain_next()
+ * Flags passed to hammer2_chain_lookup() and hammer2_chain_next()
  *
  * NOTES:
  *	NODATA	    - Asks that the chain->data not be resolved in order
@@ -714,6 +715,7 @@ typedef struct hammer2_cluster	hammer2_cluster_t;
 
 TAILQ_HEAD(inoq_head, hammer2_inode);		/* ip->entry */
 TAILQ_HEAD(depq_head, hammer2_depend);		/* depend->entry */
+
 struct hammer2_depend {
 	TAILQ_ENTRY(hammer2_depend) entry;
 	hammer2_inoq_head_t	sideq;
@@ -748,7 +750,6 @@ struct hammer2_inode {
 	hammer2_cluster_item_t	ccache[HAMMER2_MAXCLUSTER];
 	int			ccache_nchains;
 	hammer2_inode_meta_t	meta;		/* copy of meta-data */
-
 	hammer2_off_t		osize;
 
 	unsigned int		refs;		/* +vpref, +flushref */
@@ -763,6 +764,7 @@ struct hammer2_inode {
 };
 
 typedef struct hammer2_inode hammer2_inode_t;
+
 /*
  * MODIFIED	- Inode is in a modified state, ip->meta may have changes.
  * RESIZED	- Inode truncated (any) or inode extended beyond
@@ -893,14 +895,15 @@ typedef struct hammer2_thread hammer2_thread_t;
 					 HAMMER2_THREAD_STOP |		\
 					 HAMMER2_THREAD_FREEZE |	\
 					 HAMMER2_THREAD_XOPQ)
+
 /*
  * Support structure for dedup heuristic.
  */
 struct hammer2_dedup {
-	hammer2_off_t		data_off;
-	uint64_t		data_crc;
-	uint32_t		ticks;
-	uint32_t		saved_error;
+	hammer2_off_t	data_off;
+	uint64_t	data_crc;
+	uint32_t	ticks;
+	uint32_t	saved_error;
 };
 
 typedef struct hammer2_dedup hammer2_dedup_t;
@@ -981,6 +984,7 @@ struct hammer2_xop_strategy {
 	struct bio		*bio;
 	struct buf		*bp;
 };
+
 struct hammer2_xop_readdir {
 	hammer2_xop_head_t	head;
 	hammer2_key_t		lkey;
@@ -1100,7 +1104,6 @@ typedef struct hammer2_xop_scanall hammer2_xop_scanall_t;
 typedef struct hammer2_xop_lookup hammer2_xop_lookup_t;
 typedef struct hammer2_xop_connect hammer2_xop_connect_t;
 typedef struct hammer2_xop_flush hammer2_xop_flush_t;
-
 typedef struct hammer2_xop_bmap hammer2_xop_bmap_t;
 
 union hammer2_xop {
@@ -1111,7 +1114,6 @@ union hammer2_xop {
 	hammer2_xop_unlink_t	xop_unlink;
 	hammer2_xop_nrename_t	xop_nrename;
 	hammer2_xop_strategy_t	xop_strategy;
-
 	hammer2_xop_mkdirent_t	xop_mkdirent;
 	hammer2_xop_create_t	xop_create;
 	hammer2_xop_destroy_t	xop_destroy;
@@ -1135,6 +1137,7 @@ struct hammer2_xop_group {
 };
 
 typedef struct hammer2_xop_group hammer2_xop_group_t;
+
 /*
  * flags to hammer2_xop_collect().
  */
@@ -1157,10 +1160,10 @@ typedef struct hammer2_xop_group hammer2_xop_group_t;
  */
 struct hammer2_devvp {
 	TAILQ_ENTRY(hammer2_devvp) entry;
-	struct vnode		*devvp;		/* device vnode */
-	char			*path;		/* device vnode path */
+	struct vnode	*devvp;		/* device vnode */
+	char		*path;		/* device vnode path */
 	char			*fname;		/* OpenBSD */
-	int			open;		/* 1 if devvp open */
+	int		open;		/* 1 if devvp open */
 	int			xflags;		/* OpenBSD */
 };
 
@@ -1171,9 +1174,9 @@ typedef struct hammer2_devvp hammer2_devvp_t;
  * Volume management structure.
  */
 struct hammer2_volume {
-	hammer2_devvp_t		*dev;		/* device vnode management */
-	hammer2_off_t		offset;		/* offset within volumes */
-	hammer2_off_t		size;		/* volume size */
+	hammer2_devvp_t *dev;		/* device vnode management */
+	hammer2_off_t	offset;		/* offset within volumes */
+	hammer2_off_t	size;		/* volume size */
 	int			id;		/* volume id */
 };
 
@@ -1213,17 +1216,17 @@ typedef struct hammer2_iostat hammer2_iostat_t;
  * many PFSs.
  */
 struct hammer2_dev {
-	TAILQ_ENTRY(hammer2_dev) mntentry;	/* hammer2_mntlist */
+	TAILQ_ENTRY(hammer2_dev) mntentry; /* hammer2_mntlist */
 	hammer2_devvp_list_t	devvp_list;	/* list of device vnodes including *devvp */
-	hammer2_io_hash_t	iohash[HAMMER2_IOHASH_SIZE];
+	hammer2_io_hash_t iohash[HAMMER2_IOHASH_SIZE];
 	hammer2_mtx_t		iohash_lock;
 	hammer2_pfs_t		*spmp;		/* super-root pmp for transactions */
 	struct vnode		*devvp;		/* device vnode for root volume */
 	struct malloc_type *mmsg;
-	hammer2_chain_t		vchain;		/* anchor chain (topology) */
-	hammer2_chain_t		fchain;		/* anchor chain (freemap) */
-	hammer2_volume_data_t	voldata;
-	hammer2_volume_data_t	volsync;	/* synchronized voldata */
+	hammer2_chain_t vchain;		/* anchor chain (topology) */
+	hammer2_chain_t fchain;		/* anchor chain (freemap) */
+	hammer2_volume_data_t voldata;
+	hammer2_volume_data_t volsync;	/* synchronized voldata */
 	hammer2_volume_t	volumes[HAMMER2_MAX_VOLUMES]; /* list of volumes */
 	hammer2_off_t		total_size;	/* total size of volumes */
 	uint32_t		hflags;		/* HMNT2 flags applicable to device */
@@ -1990,7 +1993,7 @@ void hammer2_rmsg_inode_flush(hammer2_xop_t *xop, void *scratch, int clindex);
 void hammer2_rmsg_strategy_read(hammer2_xop_t *xop, void *scratch, int clindex);
 void hammer2_rmsg_strategy_write(hammer2_xop_t *xop, void *scratch,
 				int clindex);
-				
+
 /* hammer2_bulkfree.c */
 void hammer2_bulkfree_init(hammer2_dev_t *);
 void hammer2_bulkfree_uninit(hammer2_dev_t *);

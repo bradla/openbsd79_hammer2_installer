@@ -56,7 +56,8 @@
  * result as this means that oparent is no longer the parent of ochain, or
  * that ochain was destroyed while it was unlocked.
  */
-static int
+static
+int
 checkdirempty(hammer2_chain_t *oparent, hammer2_chain_t *ochain, int clindex)
 {
 	hammer2_chain_t *parent, *chain;
@@ -74,8 +75,9 @@ checkdirempty(hammer2_chain_t *oparent, hammer2_chain_t *ochain, int clindex)
 
 		parent = NULL;
 		chain = NULL;
-		error = hammer2_chain_inode_find(ochain->pmp, inum, clindex, 0,
-		    &parent, &chain);
+		error = hammer2_chain_inode_find(ochain->pmp, inum,
+						 clindex, 0,
+						 &parent, &chain);
 		if (parent) {
 			hammer2_chain_unlock(parent);
 			hammer2_chain_drop(parent);
@@ -107,7 +109,7 @@ checkdirempty(hammer2_chain_t *oparent, hammer2_chain_t *ochain, int clindex)
 		if (chain) {
 			hammer2_chain_unlock(chain);
 			hammer2_chain_drop(chain);
-			chain = NULL; /* safety */
+			chain = NULL;	/* safety */
 		}
 	}
 
@@ -139,7 +141,8 @@ hammer2_xop_ipcluster(hammer2_xop_t *arg, void *scratch, int clindex)
 	int error;
 
 	chain = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS | HAMMER2_RESOLVE_SHARED);
+				    HAMMER2_RESOLVE_ALWAYS |
+				    HAMMER2_RESOLVE_SHARED);
 	if (chain)
 		error = chain->error;
 	else
@@ -170,7 +173,8 @@ hammer2_xop_readdir(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * contribution ends here.
 	 */
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS | HAMMER2_RESOLVE_SHARED);
+				     HAMMER2_RESOLVE_ALWAYS |
+				     HAMMER2_RESOLVE_SHARED);
 	if (parent == NULL) {
 		hprintf("NULL parent\n");
 		goto done;
@@ -191,8 +195,10 @@ hammer2_xop_readdir(hammer2_xop_t *arg, void *scratch, int clindex)
 		if (error)
 			goto break2;
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next, HAMMER2_KEY_MAX, &error,
-					   HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+					   key_next, HAMMER2_KEY_MAX,
+					   &error,
+					   HAMMER2_LOOKUP_ALWAYS |
+					   HAMMER2_LOOKUP_SHARED);
 	}
 break2:
 	if (chain) {
@@ -231,23 +237,32 @@ hammer2_xop_nresolve(hammer2_xop_t *arg, void *scratch, int clindex)
 
 	/* Lookup the directory entry. */
 	lhc = hammer2_dirhash(name, name_len);
-	chain = hammer2_chain_lookup(&parent, &key_next, lhc,
-	    lhc + HAMMER2_DIRHASH_LOMASK, &error,
-	    HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     lhc, lhc + HAMMER2_DIRHASH_LOMASK,
+				     &error,
+				     HAMMER2_LOOKUP_ALWAYS |
+				     HAMMER2_LOOKUP_SHARED);
 	while (chain) {
 		if (hammer2_chain_dirent_test(chain, name, name_len))
 			break;
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next,lhc + HAMMER2_DIRHASH_LOMASK, &error,
-					   HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+					   key_next,
+					   lhc + HAMMER2_DIRHASH_LOMASK,
+					   &error,
+					   HAMMER2_LOOKUP_ALWAYS |
+					   HAMMER2_LOOKUP_SHARED);
 	}
 
 	/* Locate the target inode for a directory entry. */
 	if (chain && chain->error == 0) {
 		if (chain->bref.type == HAMMER2_BREF_TYPE_DIRENT) {
 			lhc = chain->bref.embed.dirent.inum;
-			error = hammer2_chain_inode_find(chain->pmp, lhc,
-			    clindex, HAMMER2_LOOKUP_SHARED, &parent, &chain);
+			error = hammer2_chain_inode_find(chain->pmp,
+							 lhc,
+							 clindex,
+							 HAMMER2_LOOKUP_SHARED,
+							 &parent,
+							 &chain);
 		}
 	} else if (chain && error == 0) {
 		error = chain->error;
@@ -290,7 +305,7 @@ hammer2_xop_unlink(hammer2_xop_t *arg, void *scratch, int clindex)
 again:
 	/* Requires exclusive lock. */
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	chain = NULL;
 	if (parent == NULL) {
 		hprintf("NULL parent\n");
@@ -302,14 +317,16 @@ again:
 
 	/* Lookup the directory entry. */
 	lhc = hammer2_dirhash(name, name_len);
-	chain = hammer2_chain_lookup(&parent, &key_next, lhc,
-	    lhc + HAMMER2_DIRHASH_LOMASK, &error, HAMMER2_LOOKUP_ALWAYS);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     lhc, lhc + HAMMER2_DIRHASH_LOMASK,
+				     &error, HAMMER2_LOOKUP_ALWAYS);
 	while (chain) {
 		if (hammer2_chain_dirent_test(chain, name, name_len))
 			break;
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next,lhc + HAMMER2_DIRHASH_LOMASK, &error,
-					   HAMMER2_LOOKUP_ALWAYS);
+					   key_next,
+					   lhc + HAMMER2_DIRHASH_LOMASK,
+					   &error, HAMMER2_LOOKUP_ALWAYS);
 	}
 
 	/*
@@ -358,12 +375,12 @@ again:
 			 * chain (aka directory entry) to still be deleted.
 			 */
 			error = hammer2_chain_delete(parent, chain,
-			    xop->head.mtid, dopermanent);
+					     xop->head.mtid, dopermanent);
 		} else if (type == HAMMER2_OBJTYPE_DIRECTORY &&
 		    xop->isdir == 0) {
 			error = HAMMER2_ERROR_EISDIR;
 		} else if (type == HAMMER2_OBJTYPE_DIRECTORY &&
-		    (error = checkdirempty(parent, chain, clindex)) != 0) {
+			   (error = checkdirempty(parent, chain, clindex)) != 0) {
 			/* error may be EAGAIN or ENOTEMPTY. */
 			if (error == HAMMER2_ERROR_EAGAIN) {
 				hammer2_chain_unlock(chain);
@@ -373,7 +390,7 @@ again:
 				goto again;
 			}
 		} else if (type != HAMMER2_OBJTYPE_DIRECTORY &&
-		    xop->isdir >= 1) {
+			   xop->isdir >= 1) {
 			error = HAMMER2_ERROR_ENOTDIR;
 		} else {
 			/*
@@ -385,7 +402,8 @@ again:
 			 * chain->error.
 			 */
 			error = hammer2_chain_delete(parent, chain,
-			    xop->head.mtid, dopermanent);
+						     xop->head.mtid,
+						     dopermanent);
 			if (error == 0)
 				error = chain->error;
 		}
@@ -404,10 +422,10 @@ again:
 	    (xop->dopermanent & H2DOPERM_IGNINO) == 0) {
 		lhc = chain->bref.embed.dirent.inum;
 		error2 = hammer2_chain_inode_find(chain->pmp, lhc, clindex, 0,
-		    &parent, &chain);
+						  &parent, &chain);
 		if (error2) {
 			hprintf("lhc %016llx failed\n", (long long)lhc);
-			error2 = 0; /* silently ignore */
+			error2 = 0;	/* silently ignore */
 		}
 		if (error == 0)
 			error = error2;
@@ -446,7 +464,9 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_nrename_t *xop = &arg->xop_nrename;
 	hammer2_pfs_t *pmp;
-	hammer2_chain_t *parent, *chain, *tmp;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
+	hammer2_chain_t *tmp;
 	hammer2_inode_t *ip;
 	hammer2_inode_data_t *wipdata;
 	hammer2_key_t key_next, lhc;
@@ -461,7 +481,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 	ip = xop->head.ip4;
 	if (ip) {
 		chain = hammer2_inode_chain(ip, clindex,
-		    HAMMER2_RESOLVE_ALWAYS);
+					    HAMMER2_RESOLVE_ALWAYS);
 		if (chain == NULL) {
 			error = HAMMER2_ERROR_EIO;
 			parent = NULL;
@@ -491,7 +511,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 	if (xop->ip_key & HAMMER2_DIRHASH_VISIBLE) {
 		/* Find ip's direct parent chain. */
 		chain = hammer2_inode_chain(ip, clindex,
-		    HAMMER2_RESOLVE_ALWAYS);
+					    HAMMER2_RESOLVE_ALWAYS);
 		if (chain == NULL) {
 			error = HAMMER2_ERROR_EIO;
 			parent = NULL;
@@ -501,7 +521,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 			parent = NULL;
 		} else {
 			parent = hammer2_chain_getparent(chain,
-			    HAMMER2_RESOLVE_ALWAYS);
+						    HAMMER2_RESOLVE_ALWAYS);
 			if (parent == NULL) {
 				error = HAMMER2_ERROR_EIO;
 				goto done;
@@ -513,7 +533,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 		 * is in fdip, do a namespace search.
 		 */
 		parent = hammer2_inode_chain(xop->head.ip1, clindex,
-		    HAMMER2_RESOLVE_ALWAYS);
+					     HAMMER2_RESOLVE_ALWAYS);
 		if (parent == NULL) {
 			hprintf("NULL parent\n");
 			error = HAMMER2_ERROR_EIO;
@@ -524,14 +544,16 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 
 		/* Lookup the directory entry. */
 		lhc = hammer2_dirhash(name, name_len);
-		chain = hammer2_chain_lookup(&parent, &key_next, lhc,
-		    lhc + HAMMER2_DIRHASH_LOMASK, &error,
-		    HAMMER2_LOOKUP_ALWAYS);
+		chain = hammer2_chain_lookup(&parent, &key_next,
+					     lhc, lhc + HAMMER2_DIRHASH_LOMASK,
+					     &error, HAMMER2_LOOKUP_ALWAYS);
 		while (chain) {
 			if (hammer2_chain_dirent_test(chain, name, name_len))
 				break;
 			chain = hammer2_chain_next(&parent, chain, &key_next,
-						   key_next,lhc + HAMMER2_DIRHASH_LOMASK, &error,
+						   key_next,
+						   lhc + HAMMER2_DIRHASH_LOMASK,
+						   &error,
 						   HAMMER2_LOOKUP_ALWAYS);
 		}
 	}
@@ -560,7 +582,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 	if (parent) {
 		hammer2_chain_unlock(parent);
 		hammer2_chain_drop(parent);
-		parent = NULL; /* safety */
+		parent = NULL;		/* safety */
 	} else {
 		hprintf("NULL parent\n");
 		error = EINVAL;
@@ -583,10 +605,12 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 			error = hammer2_chain_modify(chain, xop->head.mtid, 0, 0);
 			if (error == 0) {
 				wipdata = &chain->data->ipdata;
+
 				bzero(wipdata->filename,
-				    sizeof(wipdata->filename));
-				bcopy(xop->head.name2, wipdata->filename,
-				    xop->head.name2_len);
+				      sizeof(wipdata->filename));
+				bcopy(xop->head.name2,
+				      wipdata->filename,
+				      xop->head.name2_len);
 				wipdata->meta.name_key = xop->lhc;
 				wipdata->meta.name_len = xop->head.name2_len;
 			}
@@ -605,10 +629,10 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 					    xop->head.mtid, 0, 0);
 				if (error == 0) {
 					bzero(chain->bref.check.buf,
-					    sizeof(chain->bref.check.buf));
+					      sizeof(chain->bref.check.buf));
 					bcopy(xop->head.name2,
-					    chain->bref.check.buf,
-					    xop->head.name2_len);
+					      chain->bref.check.buf,
+					      xop->head.name2_len);
 				}
 			} else {
 				/*
@@ -617,16 +641,17 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 				 * data buffer is not 64KB so use chain->bytes
 				 * instead of sizeof().
 				 */
-				error = hammer2_chain_resize(chain,
-				    xop->head.mtid, 0,
-				    hammer2_getradix(HAMMER2_ALLOC_MIN), 0);
+				error = hammer2_chain_resize(
+					chain, xop->head.mtid, 0,
+					hammer2_getradix(HAMMER2_ALLOC_MIN), 0);
 				if (error == 0)
 					error = hammer2_chain_modify(chain,
 					    xop->head.mtid, 0, 0);
 				if (error == 0) {
 					bzero(chain->data->buf, chain->bytes);
-					bcopy(xop->head.name2, chain->data->buf,
-					    xop->head.name2_len);
+					bcopy(xop->head.name2,
+					      chain->data->buf,
+					      xop->head.name2_len);
 				}
 			}
 			if (error == 0)
@@ -655,7 +680,7 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * iterator but that is ok.
 	 */
 	parent = hammer2_inode_chain(xop->head.ip3, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		goto done;
@@ -667,19 +692,23 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 	 */
 	if (error == 0) {
 		tmp = hammer2_chain_lookup(&parent, &key_next,
-		    xop->lhc & ~HAMMER2_DIRHASH_LOMASK,
-		    xop->lhc | HAMMER2_DIRHASH_LOMASK,
-		    &error, HAMMER2_LOOKUP_ALWAYS);
+					   xop->lhc & ~HAMMER2_DIRHASH_LOMASK,
+					   xop->lhc | HAMMER2_DIRHASH_LOMASK,
+					   &error,
+					   HAMMER2_LOOKUP_ALWAYS);
 		while (tmp) {
 			if (hammer2_chain_dirent_test(tmp, xop->head.name2,
-			    xop->head.name2_len)) {
+						      xop->head.name2_len)) {
 				e2 = hammer2_chain_delete(parent, tmp,
-				    xop->head.mtid, 0);
+							  xop->head.mtid, 0);
 				if (error == 0 && e2)
 					error = e2;
 			}
 			tmp = hammer2_chain_next(&parent, tmp, &key_next,
-						 key_next,xop->lhc | HAMMER2_DIRHASH_LOMASK, &error,
+						 key_next,
+						 xop->lhc |
+						  HAMMER2_DIRHASH_LOMASK,
+						 &error,
 						 HAMMER2_LOOKUP_ALWAYS);
 		}
 	}
@@ -688,12 +717,16 @@ hammer2_xop_nrename(hammer2_xop_t *arg, void *scratch, int clindex)
 		 * A relookup is required before the create to properly
 		 * position the parent chain.
 		 */
-		tmp = hammer2_chain_lookup(&parent, &key_next, xop->lhc,
-		    xop->lhc, &error, 0);
+		tmp = hammer2_chain_lookup(&parent, &key_next,
+					   xop->lhc, xop->lhc,
+					   &error, 0);
 		KKASSERT(tmp == NULL);
 		error = hammer2_chain_create(&parent, &chain, NULL, pmp,
-		    HAMMER2_METH_DEFAULT, xop->lhc, 0, HAMMER2_BREF_TYPE_INODE,
-		    HAMMER2_INODE_BYTES, xop->head.mtid, 0, 0);
+					     HAMMER2_METH_DEFAULT,
+					     xop->lhc, 0,
+					     HAMMER2_BREF_TYPE_INODE,
+					     HAMMER2_INODE_BYTES,
+					     xop->head.mtid, 0, 0);
 	}
 done:
 	hammer2_xop_feed(&xop->head, NULL, clindex, error);
@@ -716,12 +749,14 @@ void
 hammer2_xop_scanlhc(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_scanlhc_t *xop = &arg->xop_scanlhc;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error = 0;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS | HAMMER2_RESOLVE_SHARED);
+				     HAMMER2_RESOLVE_ALWAYS |
+				     HAMMER2_RESOLVE_SHARED);
 	if (parent == NULL) {
 		hprintf("NULL parent\n");
 		chain = NULL;
@@ -733,20 +768,26 @@ hammer2_xop_scanlhc(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * Lookup all possibly conflicting directory entries, the feed
 	 * inherits the chain's lock so do not unlock it on the iteration.
 	 */
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc,
-	    xop->lhc + HAMMER2_DIRHASH_LOMASK, &error,
-	    HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc,
+				     xop->lhc + HAMMER2_DIRHASH_LOMASK,
+				     &error,
+				     HAMMER2_LOOKUP_ALWAYS |
+				     HAMMER2_LOOKUP_SHARED);
 	while (chain) {
 		error = hammer2_xop_feed(&xop->head, chain, clindex, 0);
 		if (error) {
 			hammer2_chain_unlock(chain);
 			hammer2_chain_drop(chain);
-			chain = NULL; /* safety */
+			chain = NULL;	/* safety */
 			goto done;
 		}
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next,xop->lhc + HAMMER2_DIRHASH_LOMASK, &error,
-					   HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+					   key_next,
+					   xop->lhc + HAMMER2_DIRHASH_LOMASK,
+					   &error,
+					   HAMMER2_LOOKUP_ALWAYS |
+					   HAMMER2_LOOKUP_SHARED);
 	}
 done:
 	hammer2_xop_feed(&xop->head, NULL, clindex, error);
@@ -780,8 +821,11 @@ hammer2_xop_lookup(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * Lookup all possibly conflicting directory entries, the feed
 	 * inherits the chain's lock so do not unlock it on the iteration.
 	 */
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, HAMMER2_LOOKUP_ALWAYS | HAMMER2_LOOKUP_SHARED);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error,
+				     HAMMER2_LOOKUP_ALWAYS |
+				     HAMMER2_LOOKUP_SHARED);
 	if (error == 0) {
 		if (chain)
 			error = chain->error;
@@ -789,6 +833,7 @@ hammer2_xop_lookup(hammer2_xop_t *arg, void *scratch, int clindex)
 			error = HAMMER2_ERROR_ENOENT;
 	}
 	hammer2_xop_feed(&xop->head, chain, clindex, error);
+
 done:
 	if (chain) {
 		hammer2_chain_unlock(chain);
@@ -804,12 +849,13 @@ void
 hammer2_xop_delete(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_lookup_t *xop = &arg->xop_lookup;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error = 0;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	chain = NULL;
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
@@ -820,8 +866,10 @@ hammer2_xop_delete(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * Lookup all possibly conflicting directory entries, the feed
 	 * inherits the chain's lock so do not unlock it on the iteration.
 	 */
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, HAMMER2_LOOKUP_NODATA);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error,
+				     HAMMER2_LOOKUP_NODATA);
 	if (error == 0) {
 		if (chain)
 			error = chain->error;
@@ -832,6 +880,7 @@ hammer2_xop_delete(hammer2_xop_t *arg, void *scratch, int clindex)
 		error = hammer2_chain_delete(parent, chain, xop->head.mtid,
 		    HAMMER2_DELETE_PERMANENT);
 	hammer2_xop_feed(&xop->head, NULL, clindex, error);
+
 done:
 	if (chain) {
 		hammer2_chain_unlock(chain);
@@ -855,7 +904,8 @@ void
 hammer2_xop_scanall(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_scanall_t *xop = &arg->xop_scanall;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error = 0;
 
@@ -868,7 +918,7 @@ hammer2_xop_scanall(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * contribution ends here.
 	 */
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    xop->resolve_flags);
+				     xop->resolve_flags);
 	if (parent == NULL) {
 		hprintf("NULL parent\n");
 		goto done;
@@ -878,14 +928,16 @@ hammer2_xop_scanall(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * Generic scan of exact records.  Note that indirect blocks are
 	 * automatically recursed and will not be returned.
 	 */
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->key_beg,
-	    xop->key_end, &error, xop->lookup_flags);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->key_beg, xop->key_end,
+				     &error, xop->lookup_flags);
 	while (chain) {
 		error = hammer2_xop_feed(&xop->head, chain, clindex, 0);
 		if (error)
 			goto break2;
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next, xop->key_end, &error, xop->lookup_flags);
+					   key_next, xop->key_end,
+					   &error, xop->lookup_flags);
 	}
 break2:
 	if (chain) {
@@ -905,21 +957,22 @@ void
 hammer2_xop_inode_mkdirent(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_mkdirent_t *xop = &arg->xop_mkdirent;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	size_t data_len;
 	int error;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		chain = NULL;
 		goto fail;
 	}
-
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error, 0);
 	if (chain) {
 		error = HAMMER2_ERROR_EEXIST;
 		goto fail;
@@ -933,9 +986,13 @@ hammer2_xop_inode_mkdirent(hammer2_xop_t *arg, void *scratch, int clindex)
 		data_len = 0;
 	else
 		data_len = HAMMER2_ALLOC_MIN;
+
 	error = hammer2_chain_create(&parent, &chain, NULL, xop->head.ip1->pmp,
-	    HAMMER2_METH_DEFAULT, xop->lhc, 0, HAMMER2_BREF_TYPE_DIRENT,
-	    data_len, xop->head.mtid, 0, 0);
+				     HAMMER2_METH_DEFAULT,
+				     xop->lhc, 0,
+				     HAMMER2_BREF_TYPE_DIRENT,
+				     data_len,
+				     xop->head.mtid, 0, 0);
 	if (error == 0) {
 		/*
 		 * WARNING: chain->data->buf is sized to chain->bytes,
@@ -947,10 +1004,10 @@ hammer2_xop_inode_mkdirent(hammer2_xop_t *arg, void *scratch, int clindex)
 			chain->bref.embed.dirent = xop->dirent;
 			if (xop->dirent.namlen <= sizeof(chain->bref.check.buf))
 				bcopy(xop->head.name1, chain->bref.check.buf,
-				    xop->dirent.namlen);
+				      xop->dirent.namlen);
 			else
 				bcopy(xop->head.name1, chain->data->buf,
-				    xop->dirent.namlen);
+				      xop->dirent.namlen);
 		}
 	}
 fail:
@@ -979,38 +1036,42 @@ void
 hammer2_xop_inode_create(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_create_t *xop = &arg->xop_create;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		chain = NULL;
 		goto fail;
 	}
-
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error, 0);
 	if (chain) {
 		error = HAMMER2_ERROR_EEXIST;
 		goto fail;
 	}
 
 	error = hammer2_chain_create(&parent, &chain, NULL, xop->head.ip1->pmp,
-	    HAMMER2_METH_DEFAULT, xop->lhc, 0, HAMMER2_BREF_TYPE_INODE,
-	    HAMMER2_INODE_BYTES, xop->head.mtid, 0, xop->flags);
+				     HAMMER2_METH_DEFAULT,
+				     xop->lhc, 0,
+				     HAMMER2_BREF_TYPE_INODE,
+				     HAMMER2_INODE_BYTES,
+				     xop->head.mtid, 0, xop->flags);
 	if (error == 0) {
 		error = hammer2_chain_modify(chain, xop->head.mtid, 0, 0);
 		if (error == 0) {
 			chain->data->ipdata.meta = xop->meta;
 			if (xop->head.name1) {
 				bcopy(xop->head.name1,
-				    chain->data->ipdata.filename,
-				    xop->head.name1_len);
+				      chain->data->ipdata.filename,
+				      xop->head.name1_len);
 				chain->data->ipdata.meta.name_len =
-				    xop->head.name1_len;
+					xop->head.name1_len;
 			}
 			chain->data->ipdata.meta.name_key = xop->lhc;
 		}
@@ -1043,14 +1104,15 @@ hammer2_xop_inode_create_det(hammer2_xop_t *arg, void *scratch, int clindex)
 	iroot = pip->pmp->iroot;
 
 	parent = hammer2_inode_chain(iroot, clindex, HAMMER2_RESOLVE_ALWAYS);
+
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		chain = NULL;
 		goto fail;
 	}
-
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error, 0);
 	if (chain) {
 		error = HAMMER2_ERROR_EEXIST;
 		goto fail;
@@ -1061,21 +1123,24 @@ hammer2_xop_inode_create_det(hammer2_xop_t *arg, void *scratch, int clindex)
 	 * methods.
 	 */
 	null_parent = NULL;
-	error = hammer2_chain_create(&null_parent, &chain, parent->hmp,
-	    pip->pmp, HAMMER2_ENC_COMP(pip->meta.comp_algo) +
-	    HAMMER2_ENC_CHECK(pip->meta.check_algo), xop->lhc, 0,
-	    HAMMER2_BREF_TYPE_INODE, HAMMER2_INODE_BYTES,
-	    xop->head.mtid, 0, xop->flags);
+	error = hammer2_chain_create(&null_parent, &chain,
+				     parent->hmp, pip->pmp,
+				     HAMMER2_ENC_COMP(pip->meta.comp_algo) +
+				     HAMMER2_ENC_CHECK(pip->meta.check_algo),
+				     xop->lhc, 0,
+				     HAMMER2_BREF_TYPE_INODE,
+				     HAMMER2_INODE_BYTES,
+				     xop->head.mtid, 0, xop->flags);
 	if (error == 0) {
 		error = hammer2_chain_modify(chain, xop->head.mtid, 0, 0);
 		if (error == 0) {
 			chain->data->ipdata.meta = xop->meta;
 			if (xop->head.name1) {
 				bcopy(xop->head.name1,
-				    chain->data->ipdata.filename,
-				    xop->head.name1_len);
+				      chain->data->ipdata.filename,
+				      xop->head.name1_len);
 				chain->data->ipdata.meta.name_len =
-				    xop->head.name1_len;
+					xop->head.name1_len;
 			}
 			chain->data->ipdata.meta.name_key = xop->lhc;
 		}
@@ -1099,21 +1164,22 @@ void
 hammer2_xop_inode_create_ins(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_create_t *xop = &arg->xop_create;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error;
 
 	/* (parent) will be the insertion point for inode under iroot. */
 	parent = hammer2_inode_chain(xop->head.ip1->pmp->iroot, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		chain = NULL;
 		goto fail;
 	}
-
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->lhc, xop->lhc,
-	    &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->lhc, xop->lhc,
+				     &error, 0);
 	if (chain) {
 		error = HAMMER2_ERROR_EEXIST;
 		goto fail;
@@ -1121,7 +1187,7 @@ hammer2_xop_inode_create_ins(hammer2_xop_t *arg, void *scratch, int clindex)
 
 	/* (chain) is the detached inode that is being inserted. */
 	chain = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (chain == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		chain = NULL;
@@ -1155,7 +1221,8 @@ void
 hammer2_xop_inode_destroy(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_destroy_t *xop = &arg->xop_destroy;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_inode_t *ip;
 	int error;
 
@@ -1204,27 +1271,31 @@ void
 hammer2_xop_inode_unlinkall(hammer2_xop_t *arg, void *scratch, int clindex)
 {
 	hammer2_xop_unlinkall_t *xop = &arg->xop_unlinkall;
-	hammer2_chain_t *parent, *chain;
+	hammer2_chain_t *parent;
+	hammer2_chain_t *chain;
 	hammer2_key_t key_next;
 	int error;
 
 	/* We need the precise parent chain to issue the deletion. */
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	chain = NULL;
 	if (parent == NULL) {
 		error = 0;
 		goto done;
 	}
-	chain = hammer2_chain_lookup(&parent, &key_next, xop->key_beg,
-	    xop->key_end, &error, HAMMER2_LOOKUP_ALWAYS);
+	chain = hammer2_chain_lookup(&parent, &key_next,
+				     xop->key_beg, xop->key_end,
+				     &error, HAMMER2_LOOKUP_ALWAYS);
 	while (chain) {
-		hammer2_chain_delete(parent, chain, xop->head.mtid,
-		    HAMMER2_DELETE_PERMANENT);
+		hammer2_chain_delete(parent, chain,
+				     xop->head.mtid, HAMMER2_DELETE_PERMANENT);
 		hammer2_xop_feed(&xop->head, chain, clindex, chain->error);
 		/* Depend on function to unlock the shared lock. */
 		chain = hammer2_chain_next(&parent, chain, &key_next,
-					   key_next, xop->key_end, &error, HAMMER2_LOOKUP_ALWAYS);
+					   key_next, xop->key_end,
+					   &error,
+					   HAMMER2_LOOKUP_ALWAYS);
 	}
 done:
 	if (error == 0)
@@ -1256,15 +1327,15 @@ hammer2_xop_inode_connect(hammer2_xop_t *arg, void *scratch, int clindex)
 	 */
 	pmp = xop->head.ip1->pmp;
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		chain = NULL;
 		error = HAMMER2_ERROR_EIO;
 		goto fail;
 	}
-
-	chain = hammer2_chain_lookup(&parent, &key_dummy, xop->lhc, xop->lhc,
-	    &error, 0);
+	chain = hammer2_chain_lookup(&parent, &key_dummy,
+				     xop->lhc, xop->lhc,
+				     &error, 0);
 	if (chain) {
 		hammer2_chain_unlock(chain);
 		hammer2_chain_drop(chain);
@@ -1282,7 +1353,7 @@ hammer2_xop_inode_connect(hammer2_xop_t *arg, void *scratch, int clindex)
 	 *	 do it here.
 	 */
 	chain = hammer2_inode_chain(xop->head.ip2, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				    HAMMER2_RESOLVE_ALWAYS);
 	error = hammer2_chain_modify(chain, xop->head.mtid, 0, 0);
 	if (error)
 		goto fail;
@@ -1329,7 +1400,7 @@ hammer2_xop_inode_chain_sync(hammer2_xop_t *arg, void *scratch, int clindex)
 	int error = 0;
 
 	parent = hammer2_inode_chain(xop->head.ip1, clindex,
-	    HAMMER2_RESOLVE_ALWAYS);
+				     HAMMER2_RESOLVE_ALWAYS);
 	if (parent == NULL) {
 		error = HAMMER2_ERROR_EIO;
 		goto done;
@@ -1347,10 +1418,12 @@ hammer2_xop_inode_chain_sync(hammer2_xop_t *arg, void *scratch, int clindex)
 		 * straddling the EOF will be pending in the bioq.
 		 */
 		lbase = (xop->meta.size + HAMMER2_PBUFMASK64) &
-		    ~HAMMER2_PBUFMASK64;
-		chain = hammer2_chain_lookup(&parent, &key_next, lbase,
-		    HAMMER2_KEY_MAX, &error,
-		    HAMMER2_LOOKUP_NODATA | HAMMER2_LOOKUP_NODIRECT);
+			~HAMMER2_PBUFMASK64;
+		chain = hammer2_chain_lookup(&parent, &key_next,
+					     lbase, HAMMER2_KEY_MAX,
+					     &error,
+					     HAMMER2_LOOKUP_NODATA |
+					     HAMMER2_LOOKUP_NODIRECT);
 		while (chain) {
 			/* Degenerate embedded case, nothing to loop on. */
 			switch (chain->bref.type) {
@@ -1360,22 +1433,26 @@ hammer2_xop_inode_chain_sync(hammer2_xop_t *arg, void *scratch, int clindex)
 				break;
 			case HAMMER2_BREF_TYPE_DATA:
 				hammer2_chain_delete(parent, chain,
-				    xop->head.mtid, HAMMER2_DELETE_PERMANENT);
+						     xop->head.mtid,
+						     HAMMER2_DELETE_PERMANENT);
 				break;
 			}
 			chain = hammer2_chain_next(&parent, chain, &key_next,
-						   key_next, HAMMER2_KEY_MAX, &error,
-						   HAMMER2_LOOKUP_NODATA | HAMMER2_LOOKUP_NODIRECT);
+						   key_next, HAMMER2_KEY_MAX,
+						   &error,
+						   HAMMER2_LOOKUP_NODATA |
+						   HAMMER2_LOOKUP_NODIRECT);
 		}
 
 		/* Reset to point at inode for following code, if necessary. */
 		if (parent->bref.type != HAMMER2_BREF_TYPE_INODE) {
 			hammer2_chain_unlock(parent);
 			hammer2_chain_drop(parent);
-			parent = hammer2_inode_chain(xop->head.ip1, clindex,
-			    HAMMER2_RESOLVE_ALWAYS);
+			parent = hammer2_inode_chain(xop->head.ip1,
+						     clindex,
+						     HAMMER2_RESOLVE_ALWAYS);
 			hprintf("truncate reset on '%s'\n",
-			    parent->data->ipdata.filename);
+				parent->data->ipdata.filename);
 		}
 	}
 
@@ -1418,7 +1495,8 @@ hammer2_xop_bmap(hammer2_xop_t *arg, void *scratch, int clindex)
 
 	chain = NULL;
 	parent = hammer2_inode_chain(ip, clindex,
-	    HAMMER2_RESOLVE_ALWAYS | HAMMER2_RESOLVE_SHARED);
+				     HAMMER2_RESOLVE_ALWAYS |
+				     HAMMER2_RESOLVE_SHARED);
 	if (parent == NULL) {
 		hprintf("NULL parent\n");
 		error = HAMMER2_ERROR_EIO;
@@ -1428,7 +1506,8 @@ hammer2_xop_bmap(hammer2_xop_t *arg, void *scratch, int clindex)
 	xop->offset = HAMMER2_OFF_MASK;
 	lbase = (hammer2_key_t)xop->lbn * hammer2_get_logical();
 	chain = hammer2_chain_lookup(&parent, &key_dummy, lbase, lbase,
-	    &error, HAMMER2_LOOKUP_SHARED);
+				     &error,
+				     HAMMER2_LOOKUP_SHARED);
 	if (error == 0) {
 		if (chain) {
 			error = chain->error;

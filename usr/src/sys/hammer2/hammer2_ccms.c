@@ -138,7 +138,7 @@ ccms_thread_lock_nonblock(ccms_cst_t *cst, ccms_state_t state)
 	if (cst->count < 0 && cst->td == curproc) {
 		--cst->count;
 		LOCKENTER;
-		return (0);
+		return(0);
 	}
 
 	hammer2_spin_ex(&cst->spin);
@@ -162,7 +162,7 @@ ccms_thread_lock_nonblock(ccms_cst_t *cst, ccms_state_t state)
 	}
 	hammer2_spin_unex(&cst->spin);
 	LOCKENTER;
-	return (0);
+	return(0);
 }
 
 ccms_state_t
@@ -170,11 +170,11 @@ ccms_thread_lock_temp_release(ccms_cst_t *cst)
 {
 	if (cst->count < 0) {
 		ccms_thread_unlock(cst);
-		return (CCMS_STATE_EXCLUSIVE);
+		return(CCMS_STATE_EXCLUSIVE);
 	}
 	if (cst->count > 0) {
 		ccms_thread_unlock(cst);
-		return (CCMS_STATE_SHARED);
+		return(CCMS_STATE_SHARED);
 	}
 	return (CCMS_STATE_INVALID);
 }
@@ -198,7 +198,7 @@ ccms_thread_lock_upgrade(ccms_cst_t *cst)
 	 */
 	if (cst->count < 0) {
 		KKASSERT(cst->td == curproc);
-		return (CCMS_STATE_EXCLUSIVE);
+		return(CCMS_STATE_EXCLUSIVE);
 	}
 
 	/*
@@ -215,11 +215,11 @@ ccms_thread_lock_upgrade(ccms_cst_t *cst)
 		cst->count = -1;
 		cst->td = curproc;
 		hammer2_spin_unex(&cst->spin);
-		return (CCMS_STATE_SHARED);
+		return(CCMS_STATE_SHARED);
 	}
 	panic("ccms_thread_lock_upgrade: not locked");
 	/* NOT REACHED */
-	return (0);
+	return(0);
 }
 
 void

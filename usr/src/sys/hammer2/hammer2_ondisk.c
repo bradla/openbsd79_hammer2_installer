@@ -289,13 +289,13 @@ hammer2_verify_volumes_common(const hammer2_volume_t *volumes,
 	/* Check volume header. */
 	if (rootvoldata->volu_id != HAMMER2_ROOT_VOLUME) {
 		hprintf("volume id %d must be %d\n", rootvoldata->volu_id,
-		    HAMMER2_ROOT_VOLUME);
+			HAMMER2_ROOT_VOLUME);
 		return (EINVAL);
 	}
 	uuid_snprintf(buf, sizeof(buf), &rootvoldata->fstype);
 	if (strcmp(buf, HAMMER2_UUID_STRING)) {
 		hprintf("volume fstype uuid %s must be %s\n", buf,
-		    HAMMER2_UUID_STRING);
+			HAMMER2_UUID_STRING);
 		return (EINVAL);
 	}
 
@@ -345,7 +345,7 @@ hammer2_verify_volumes_common(const hammer2_volume_t *volumes,
 
 static int
 hammer2_verify_volumes_1(const hammer2_volume_t *volumes,
-    const hammer2_volume_data_t *rootvoldata)
+		         const hammer2_volume_data_t *rootvoldata)
 {
 	const hammer2_volume_t *vol;
 	hammer2_off_t off;
@@ -405,7 +405,7 @@ hammer2_verify_volumes_1(const hammer2_volume_t *volumes,
 
 static int
 hammer2_verify_volumes_2(const hammer2_volume_t *volumes,
-    const hammer2_volume_data_t *rootvoldata)
+		         const hammer2_volume_data_t *rootvoldata)
 {
 	const hammer2_volume_t *vol;
 	hammer2_off_t off, total_size = 0;
@@ -424,7 +424,7 @@ hammer2_verify_volumes_2(const hammer2_volume_t *volumes,
 	/* Check volume header. */
 	if (rootvoldata->nvolumes != nvolumes) {
 		hprintf("volume header requires %d devices, %d specified\n",
-		    rootvoldata->nvolumes, nvolumes);
+			rootvoldata->nvolumes, nvolumes);
 		return (EINVAL);
 	}
 	if (rootvoldata->total_size != total_size) {
@@ -492,7 +492,7 @@ hammer2_verify_volumes_2(const hammer2_volume_t *volumes,
 			}
 			if (vol->size & HAMMER2_FREEMAP_LEVEL1_MASK) {
 				hprintf("%s's size is not %016llx aligned\n",
-				    path,
+					path,
 				    (long long)HAMMER2_FREEMAP_LEVEL1_SIZE);
 				return (EINVAL);
 			}
@@ -510,7 +510,7 @@ hammer2_verify_volumes_2(const hammer2_volume_t *volumes,
 
 static int
 hammer2_verify_volumes(const hammer2_volume_t *volumes,
-    const hammer2_volume_data_t *rootvoldata)
+		       const hammer2_volume_data_t *rootvoldata)
 {
 	int error;
 
@@ -529,7 +529,7 @@ hammer2_verify_volumes(const hammer2_volume_t *volumes,
  */
 static int
 hammer2_read_volume_header(struct vnode *devvp, const char *path,
-    hammer2_volume_data_t *voldata)
+			   hammer2_volume_data_t *voldata)
 {
 	hammer2_volume_data_t *vd;
 	hammer2_crc32_t crc0, crc1;
@@ -574,10 +574,11 @@ hammer2_read_volume_header(struct vnode *devvp, const char *path,
 			brelse(bp);
 			continue;
 		}
+
 		if (vd->magic == HAMMER2_VOLUME_ID_ABO) {
 			/* XXX: Reversed-endianness filesystem. */
 			hprintf("%s #%d: reverse-endian filesystem detected\n",
-			    path, i);
+				path, i);
 			brelse(bp);
 			continue;
 		}
@@ -585,31 +586,31 @@ hammer2_read_volume_header(struct vnode *devvp, const char *path,
 		/* Verify volume header CRC's. */
 		crc0 = vd->icrc_sects[HAMMER2_VOL_ICRC_SECT0];
 		crc1 = hammer2_icrc32(bp->b_data + HAMMER2_VOLUME_ICRC0_OFF,
-		    HAMMER2_VOLUME_ICRC0_SIZE);
+				      HAMMER2_VOLUME_ICRC0_SIZE);
 		if (crc0 != crc1) {
 			hprintf("%s #%d: volume header crc mismatch sect0 "
 			    "%08x/%08x\n",
-			    path, i, crc0, crc1);
+				path, i, crc0, crc1);
 			brelse(bp);
 			continue;
 		}
 		crc0 = vd->icrc_sects[HAMMER2_VOL_ICRC_SECT1];
 		crc1 = hammer2_icrc32(bp->b_data + HAMMER2_VOLUME_ICRC1_OFF,
-		    HAMMER2_VOLUME_ICRC1_SIZE);
+				      HAMMER2_VOLUME_ICRC1_SIZE);
 		if (crc0 != crc1) {
 			hprintf("%s #%d: volume header crc mismatch sect1 "
 			    "%08x/%08x\n",
-			    path, i, crc0, crc1);
+				path, i, crc0, crc1);
 			brelse(bp);
 			continue;
 		}
 		crc0 = vd->icrc_volheader;
 		crc1 = hammer2_icrc32(bp->b_data + HAMMER2_VOLUME_ICRCVH_OFF,
-		    HAMMER2_VOLUME_ICRCVH_SIZE);
+				      HAMMER2_VOLUME_ICRCVH_SIZE);
 		if (crc0 != crc1) {
 			hprintf("%s #%d: volume header crc mismatch vh "
 			    "%08x/%08x\n",
-			    path, i, crc0, crc1);
+				path, i, crc0, crc1);
 			brelse(bp);
 			continue;
 		}
@@ -709,15 +710,15 @@ hammer2_init_volumes(const hammer2_devvp_list_t *devvpl,
 
 		/* Check volume ID. */
 		if (voldata->volu_id >= HAMMER2_MAX_VOLUMES) {
-			hprintf("%s has bad volume id %d\n",
-			    path, voldata->volu_id);
+			hprintf("%s has bad volume id %d\n", path,
+				voldata->volu_id);
 			error = EINVAL;
 			goto done;
 		}
 		vol = &volumes[voldata->volu_id];
 		if (vol->id != -1) {
 			hprintf("volume id %d already initialized\n",
-			    voldata->volu_id);
+				voldata->volu_id);
 			error = EINVAL;
 			goto done;
 		}
@@ -737,19 +738,19 @@ hammer2_init_volumes(const hammer2_devvp_list_t *devvpl,
 			}
 			if (nvolumes != voldata->nvolumes) {
 				hprintf("volume count mismatch %d vs %d\n",
-				    nvolumes, voldata->nvolumes);
+					nvolumes, voldata->nvolumes);
 				error = ENXIO;
 				goto done;
 			}
 			if (bcmp(&fsid, &voldata->fsid, sizeof(fsid))) {
 				hammer2_print_uuid_mismatch(&fsid,
-				    &voldata->fsid, "fsid");
+							    &voldata->fsid, "fsid");
 				error = ENXIO;
 				goto done;
 			}
 			if (bcmp(&fstype, &voldata->fstype, sizeof(fstype))) {
 				hammer2_print_uuid_mismatch(&fstype,
-				    &voldata->fstype, "fstype");
+							    &voldata->fstype, "fstype");
 				error = ENXIO;
 				goto done;
 			}

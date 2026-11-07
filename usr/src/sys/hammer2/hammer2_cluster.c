@@ -74,7 +74,7 @@ hammer2_cluster_type(const hammer2_cluster_t *cluster)
 {
 	if (cluster->error == 0) {
 		KKASSERT(cluster->focus != NULL);
-		return (cluster->focus->bref.type);
+		return(cluster->focus->bref.type);
 	}
 	return (0);
 }
@@ -384,7 +384,7 @@ hammer2_cluster_check(hammer2_cluster_t *cluster, hammer2_key_t key, int flags)
 
 		for (i = 0; i < cluster->nchains; ++i) {
 			/* XXX SOFT smpresent handling */
-			switch (cluster->pmp->pfs_types[i]) {
+			switch(cluster->pmp->pfs_types[i]) {
 			case HAMMER2_PFSTYPE_MASTER:
 			case HAMMER2_PFSTYPE_SUPROOT:
 				break;

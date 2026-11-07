@@ -96,6 +96,7 @@
  * HAMMER2_SEGSIZE	- Allocation map segment size, typically 4MB
  *			  (space represented by a level0 bitmap).
  */
+
 #define HAMMER2_SEGSIZE		(1 << HAMMER2_FREEMAP_LEVEL0_RADIX)
 #define HAMMER2_SEGRADIX	HAMMER2_FREEMAP_LEVEL0_RADIX
 
@@ -359,6 +360,7 @@ _Static_assert(HAMMER2_SET_COUNT == 4, "freemap assumes SET_COUNT is 4");
  * 32 blocks (radix 5) per element.
  * representing INDEX_SIZE bytes worth of storage per element.
  */
+
 typedef uint64_t hammer2_bitmap_t;
 
 #define HAMMER2_BMAP_ALLONES		((hammer2_bitmap_t)-1)
@@ -761,6 +763,7 @@ struct hammer2_blockset {
 };
 
 typedef struct hammer2_blockset hammer2_blockset_t;
+
 /*
  * Catch programmer snafus
  */
@@ -1237,6 +1240,7 @@ struct hammer2_volume_data {
 	 */
 						/* 1000-8FFF copyinfo config */
 	hammer2_volconf_t copyinfo[HAMMER2_COPYID_COUNT];
+
 	/*
 	 * Remaining sections are reserved for future use.
 	 */

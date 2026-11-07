@@ -188,6 +188,7 @@ typedef struct hammer2_ioc_volume_list hammer2_ioc_volume_list_t;
 /*
  * Ioctl list
  */
+
 #define HAMMER2IOC_VERSION_GET	_IOWR('h', 64, struct hammer2_ioc_version)
 #define HAMMER2IOC_RECLUSTER	_IOWR('h', 65, struct hammer2_ioc_recluster)
 

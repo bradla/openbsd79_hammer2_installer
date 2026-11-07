@@ -108,10 +108,10 @@ hammer2_chain_cmp(const hammer2_chain_t *chain1, const hammer2_chain_t *chain2)
 	c2_end = c2_beg + ((hammer2_key_t)1 << chain2->bref.keybits) - 1;
 
 	if (c1_end < c2_beg)	/* fully to the left */
-		return (-1);
+		return(-1);
 	if (c1_beg > c2_end)	/* fully to the right */
-		return (1);
-	return (0);		/* overlap (must not cross edge boundary) */
+		return(1);
+	return(0);		/* overlap (must not cross edge boundary) */
 }
 
 /*
@@ -129,7 +129,6 @@ static __inline void
 hammer2_chain_assert_no_data(const hammer2_chain_t *chain)
 {
 	KKASSERT(chain->dio == NULL);
-
 	if (chain->bref.type != HAMMER2_BREF_TYPE_VOLUME &&
 	    chain->bref.type != HAMMER2_BREF_TYPE_FREEMAP &&
 	    chain->data)
@@ -179,7 +178,7 @@ hammer2_chain_setflush(hammer2_chain_t *chain)
  */
 static hammer2_chain_t *
 hammer2_chain_alloc(hammer2_dev_t *hmp, hammer2_pfs_t *pmp,
-    hammer2_blockref_t *bref)
+		    hammer2_blockref_t *bref)
 {
 	hammer2_chain_t *chain;
 	unsigned int bytes;
@@ -193,7 +192,7 @@ hammer2_chain_alloc(hammer2_dev_t *hmp, hammer2_pfs_t *pmp,
 	else
 		bytes = 0;
 
-	switch (bref->type) {
+	switch(bref->type) {
 	case HAMMER2_BREF_TYPE_INODE:
 	case HAMMER2_BREF_TYPE_INDIRECT:
 	case HAMMER2_BREF_TYPE_DATA:
@@ -288,9 +287,10 @@ hammer2_chain_ref_hold(hammer2_chain_t *chain)
 #define HAMMER2_CHAIN_INSERT_LIVE	0x0002
 #define HAMMER2_CHAIN_INSERT_RACE	0x0004
 
-static int
-hammer2_chain_insert(hammer2_chain_t *parent, hammer2_chain_t *chain, int flags,
-    int generation)
+static
+int
+hammer2_chain_insert(hammer2_chain_t *parent, hammer2_chain_t *chain,
+		     int flags, int generation)
 {
 	hammer2_chain_t *xchain __diagused;
 	int error = 0;
@@ -378,7 +378,6 @@ hammer2_chain_unhold(hammer2_chain_t *chain)
 	for (;;) {
 		lockcnt = chain->lockcnt;
 		cpu_ccfence();
-
 		if (lockcnt > 1) {
 			if (atomic_cmpset_int(&chain->lockcnt, lockcnt,
 			    lockcnt - 1))
@@ -441,7 +440,8 @@ hammer2_chain_rehold(hammer2_chain_t *chain)
  *
  * The core spinlock is allowed to nest child-to-parent (not parent-to-child).
  */
-static hammer2_chain_t *
+static
+hammer2_chain_t *
 hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 {
 	hammer2_chain_t *parent, *rdrop;
@@ -466,8 +466,8 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 		 * If the chain has a parent the MODIFIED bit prevents
 		 * scrapping.
 		 */
-		if (chain->flags &
-		    (HAMMER2_CHAIN_UPDATE | HAMMER2_CHAIN_MODIFIED)) {
+		if (chain->flags & (HAMMER2_CHAIN_UPDATE |
+				    HAMMER2_CHAIN_MODIFIED)) {
 			if (atomic_cmpset_int(&chain->refs, 1, 0)) {
 				hammer2_spin_unex(&chain->core.spin);
 				hammer2_chain_assert_no_data(chain);
@@ -481,7 +481,7 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 		}
 		/* spinlock still held */
 	} else if (chain->bref.type == HAMMER2_BREF_TYPE_VOLUME ||
-	    chain->bref.type == HAMMER2_BREF_TYPE_FREEMAP) {
+		   chain->bref.type == HAMMER2_BREF_TYPE_FREEMAP) {
 		/*
 		 * Retain the static vchain and fchain.  Clear bits that
 		 * are not relevant.  Do not clear the MODIFIED bit,
@@ -515,10 +515,11 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 		 */
 		if (chain->core.chain_count) {
 			hammer2_spin_unex(&chain->core.spin);
-			hammer2_flush(chain,
-			    HAMMER2_FLUSH_TOP | HAMMER2_FLUSH_ALL);
+			hammer2_flush(chain, HAMMER2_FLUSH_TOP |
+					     HAMMER2_FLUSH_ALL);
 			hammer2_mtx_unlock(&chain->lock);
-			return (chain); /* retry drop */
+
+			return(chain);	/* retry drop */
 		}
 
 		/*
@@ -537,6 +538,7 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 		}
 		/* spinlock still held */
 	}
+
 	/* spinlock still held */
 
 	/*
@@ -570,6 +572,7 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 	 */
 	/// XXX hmp = chain->hmp;
 	rdrop = NULL;
+
 	parent = chain->parent;
 
 	/*
@@ -593,7 +596,8 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 			hammer2_spin_unex(&parent->core.spin);
 			hammer2_spin_unex(&chain->core.spin);
 			hammer2_mtx_unlock(&chain->lock);
-			return (chain);
+
+			return(chain);
 		}
 
 		/*
@@ -629,7 +633,7 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 			atomic_add_int(&rdrop->refs, 1);
 		}
 		hammer2_spin_unex(&parent->core.spin);
-		parent = NULL; /* safety */
+		parent = NULL;	/* safety */
 	} else {
 		/* No-parent case. */
 		if (atomic_cmpset_int(&chain->refs, 1, 0) == 0) {
@@ -637,7 +641,8 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 			hammer2_spin_unex(&parent->core.spin);
 			hammer2_spin_unex(&chain->core.spin);
 			hammer2_mtx_unlock(&chain->lock);
-			return (chain);
+
+			return(chain);
 		}
 	}
 
@@ -651,14 +656,15 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 	hammer2_spin_unex(&chain->core.spin);
 	hammer2_chain_assert_no_data(chain);
 	hammer2_mtx_unlock(&chain->lock);
-	KKASSERT(RB_EMPTY(&chain->core.rbtree) && chain->core.chain_count == 0);
+	KKASSERT(RB_EMPTY(&chain->core.rbtree) &&
+		 chain->core.chain_count == 0);
 
 	/*
 	 * All locks are gone, no pointers remain to the chain, finish
 	 * freeing it.
 	 */
-	KKASSERT((chain->flags &
-	    (HAMMER2_CHAIN_UPDATE | HAMMER2_CHAIN_MODIFIED)) == 0);
+	KKASSERT((chain->flags & (HAMMER2_CHAIN_UPDATE |
+				  HAMMER2_CHAIN_MODIFIED)) == 0);
 
 	/*
 	 * Once chain resources are gone we can use the now dead chain
@@ -682,7 +688,7 @@ hammer2_chain_lastdrop(hammer2_chain_t *chain, int depth)
 	}
 
 	/* Possible chaining loop when parent re-drop needed. */
-	return (rdrop);
+	return(rdrop);
 }
 
 /*
@@ -697,7 +703,7 @@ hammer2_chain_drop_data(hammer2_chain_t *chain)
 		chain->dio = NULL;
 		chain->data = NULL;
 	} else {
-		switch (chain->bref.type) {
+		switch(chain->bref.type) {
 		case HAMMER2_BREF_TYPE_VOLUME:
 		case HAMMER2_BREF_TYPE_FREEMAP:
 			break;
@@ -833,7 +839,7 @@ hammer2_chain_lock(hammer2_chain_t *chain, int how)
 	 * applicable to HAMMER2_BREF_TYPE_DATA which is special-cased.
 	 * Other bref types expects the data to be there.
 	 */
-	switch (how & HAMMER2_RESOLVE_MASK) {
+	switch(how & HAMMER2_RESOLVE_MASK) {
 	case HAMMER2_RESOLVE_NEVER:
 		return (0);
 	case HAMMER2_RESOLVE_MAYBE:
@@ -912,13 +918,14 @@ again:
 	 * The getblk() optimization can only be used on newly created
 	 * elements if the physical block size matches the request.
 	 */
-
 	if (chain->flags & HAMMER2_CHAIN_INITIAL) {
-		error = hammer2_io_new(hmp, bref->type, bref->data_off,
-		    chain->bytes, &chain->dio);
+		error = hammer2_io_new(hmp, bref->type,
+				       bref->data_off, chain->bytes,
+				       &chain->dio);
 	} else {
-		error = hammer2_io_bread(hmp, bref->type, bref->data_off,
-		    chain->bytes, &chain->dio);
+		error = hammer2_io_bread(hmp, bref->type,
+					 bref->data_off, chain->bytes,
+					 &chain->dio);
 		hammer2_adjreadcounter(chain->bref.type, chain->bytes);
 	}
 	if (error) {
@@ -958,6 +965,7 @@ again:
 			bp->b_flags &= ~B_IOISSUED;
 		}
 	}
+
 	/*
 	 * NOTE: A locked chain's data cannot be modified without first
 	 *	 calling hammer2_chain_modify().
@@ -1046,10 +1054,9 @@ hammer2_chain_unlock(hammer2_chain_t *chain)
 		lockcnt = chain->lockcnt;
 		KKASSERT(lockcnt > 0);
 		cpu_ccfence();
-
 		if (lockcnt > 1) {
-			if (atomic_cmpset_int(&chain->lockcnt, lockcnt,
-			    lockcnt - 1)) {
+			if (atomic_cmpset_int(&chain->lockcnt,
+					      lockcnt, lockcnt - 1)) {
 				hammer2_mtx_unlock(&chain->lock);
 				return;
 			}
@@ -1091,14 +1098,15 @@ hammer2_chain_unlock(hammer2_chain_t *chain)
  * XXX Not widely used yet, various use cases need to be validated and
  *     converted to use this function.
  */
-static hammer2_blockref_t *
+static
+hammer2_blockref_t *
 hammer2_chain_base_and_count(hammer2_chain_t *parent, int *countp)
 {
 	hammer2_blockref_t *base = NULL;
 	int count;
 
 	if (parent->flags & HAMMER2_CHAIN_INITIAL) {
-		switch (parent->bref.type) {
+		switch(parent->bref.type) {
 		case HAMMER2_BREF_TYPE_INODE:
 			count = HAMMER2_SET_COUNT;
 			break;
@@ -1117,7 +1125,7 @@ hammer2_chain_base_and_count(hammer2_chain_t *parent, int *countp)
 			break;
 		}
 	} else {
-		switch (parent->bref.type) {
+		switch(parent->bref.type) {
 		case HAMMER2_BREF_TYPE_INODE:
 			base = &parent->data->ipdata.u.blockset.blockref[0];
 			count = HAMMER2_SET_COUNT;
@@ -1128,7 +1136,8 @@ hammer2_chain_base_and_count(hammer2_chain_t *parent, int *countp)
 			count = parent->bytes / sizeof(hammer2_blockref_t);
 			break;
 		case HAMMER2_BREF_TYPE_VOLUME:
-			base = &parent->data->voldata.sroot_blockset.blockref[0];
+			base = &parent->data->voldata.
+					sroot_blockset.blockref[0];
 			count = HAMMER2_SET_COUNT;
 			break;
 		case HAMMER2_BREF_TYPE_FREEMAP:
@@ -1178,7 +1187,7 @@ hammer2_chain_countbrefs(hammer2_chain_t *chain, hammer2_blockref_t *base,
 			while (count >= 0) {
 				if (base[count].type != HAMMER2_BREF_TYPE_EMPTY)
 					atomic_add_int(&chain->core.live_count,
-					    1);
+						       1);
 				--count;
 			}
 		} else {
@@ -1214,8 +1223,9 @@ hammer2_chain_countbrefs(hammer2_chain_t *chain, hammer2_blockref_t *base,
  * XXX return error if cannot resize.
  */
 int
-hammer2_chain_resize(hammer2_chain_t *chain, hammer2_tid_t mtid,
-    hammer2_off_t dedup_off, int nradix, int flags)
+hammer2_chain_resize(hammer2_chain_t *chain,
+		     hammer2_tid_t mtid, hammer2_off_t dedup_off,
+		     int nradix, int flags)
 {
 	size_t obytes, nbytes;
 	int error;
@@ -1226,8 +1236,8 @@ hammer2_chain_resize(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	 */
 	KKASSERT(chain != &chain->hmp->vchain);
 	KKASSERT(chain->bref.type == HAMMER2_BREF_TYPE_DATA ||
-	    chain->bref.type == HAMMER2_BREF_TYPE_INDIRECT ||
-	    chain->bref.type == HAMMER2_BREF_TYPE_DIRENT);
+		 chain->bref.type == HAMMER2_BREF_TYPE_INDIRECT ||
+		 chain->bref.type == HAMMER2_BREF_TYPE_DIRENT);
 
 	/* Nothing to do if the element is already the proper size. */
 	obytes = chain->bytes;
@@ -1269,7 +1279,7 @@ hammer2_chain_resize(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	 */
 	if (chain->dio) {
 		KKASSERT(chain->bref.type == HAMMER2_BREF_TYPE_DATA ||
-		    chain->bref.type == HAMMER2_BREF_TYPE_DIRENT);
+			 chain->bref.type == HAMMER2_BREF_TYPE_DIRENT);
 		hammer2_io_brelse(&chain->dio);
 		chain->data = NULL;
 	}
@@ -1292,7 +1302,7 @@ hammer2_chain_resize(hammer2_chain_t *chain, hammer2_tid_t mtid,
  * remains unmodified with its old data ref intact and chain->error
  * unchanged.
  *
- *		Dedup Handling
+ *				 Dedup Handling
  *
  * If the DEDUPABLE flag is set in the chain the storage must be reallocated
  * even if the chain is still flagged MODIFIED.  In this case the chain's
@@ -1305,7 +1315,7 @@ hammer2_chain_resize(hammer2_chain_t *chain, hammer2_tid_t mtid,
  */
 int
 hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
-    hammer2_off_t dedup_off, int flags)
+		     hammer2_off_t dedup_off, int flags)
 {
 	hammer2_dev_t *hmp = chain->hmp;
 	hammer2_io_t *dio, *tio;
@@ -1362,18 +1372,20 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 		 *	 source when the check mode is set to NONE.
 		 */
 		if ((chain->bref.type == HAMMER2_BREF_TYPE_DATA ||
-		    chain->bref.type == HAMMER2_BREF_TYPE_DIRENT) &&
+		     chain->bref.type == HAMMER2_BREF_TYPE_DIRENT) &&
 		    (chain->flags & HAMMER2_CHAIN_INITIAL) == 0 &&
 		    (chain->flags & HAMMER2_CHAIN_DEDUPABLE) == 0 &&
 		    HAMMER2_DEC_CHECK(chain->bref.methods) ==
-		    HAMMER2_CHECK_NONE && chain->pmp &&
+		     HAMMER2_CHECK_NONE &&
+		    chain->pmp &&
 		    chain->bref.modify_tid >
-		    chain->pmp->iroot->meta.pfs_lsnap_tid) {
+		     chain->pmp->iroot->meta.pfs_lsnap_tid) {
 			/* Sector overwrite allowed. */
 			newmod = 0;
-		} else if ((hmp->hflags & HMNT2_EMERG) && chain->pmp &&
-		    chain->bref.modify_tid >
-		    chain->pmp->iroot->meta.pfs_lsnap_tid) {
+		} else if ((hmp->hflags & HMNT2_EMERG) &&
+			   chain->pmp &&
+			   chain->bref.modify_tid >
+			    chain->pmp->iroot->meta.pfs_lsnap_tid) {
 			/*
 			 * If in emergency delete mode then do a modify-in-
 			 * place on any chain type belonging to the PFS as
@@ -1446,9 +1458,11 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	 * XXX Can a chain already be marked MODIFIED without a data
 	 * assignment?  If not, assert here instead of testing the case.
 	 */
-	if (chain != &hmp->vchain && chain != &hmp->fchain && chain->bytes) {
+	if (chain != &hmp->vchain && chain != &hmp->fchain &&
+	    chain->bytes) {
 		if ((chain->bref.data_off & ~HAMMER2_OFF_MASK_RADIX) == 0 ||
-		    newmod) {
+		    newmod
+		) {
 			/*
 			 * NOTE: We do not have to remove the dedup
 			 *	 registration because the area is still
@@ -1459,24 +1473,24 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 				chain->bref.data_off = dedup_off;
 				if ((int)(dedup_off & HAMMER2_OFF_MASK_RADIX))
 					chain->bytes = 1 <<
-					    (int)(dedup_off &
-					    HAMMER2_OFF_MASK_RADIX);
+						(int)(dedup_off &
+						HAMMER2_OFF_MASK_RADIX);
 				else
 					chain->bytes = 0;
 				chain->error = 0;
 				atomic_clear_int(&chain->flags,
-				    HAMMER2_CHAIN_MODIFIED);
+						 HAMMER2_CHAIN_MODIFIED);
 				atomic_add_int(&hammer2_count_chain_modified,
-				    -1);
+						-1);
 				hammer2_freemap_adjust(hmp, &chain->bref,
-				    HAMMER2_FREEMAP_DORECOVER);
+						HAMMER2_FREEMAP_DORECOVER);
 				atomic_set_int(&chain->flags,
-				    HAMMER2_CHAIN_DEDUPABLE);
+						HAMMER2_CHAIN_DEDUPABLE);
 			} else {
 				error = hammer2_freemap_alloc(chain,
-				    chain->bytes);
+							      chain->bytes);
 				atomic_clear_int(&chain->flags,
-				    HAMMER2_CHAIN_DEDUPABLE);
+						HAMMER2_CHAIN_DEDUPABLE);
 
 				/*
 				 * If we are unable to allocate a new block
@@ -1494,10 +1508,10 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 				if (error && (hmp->hflags & HMNT2_EMERG)) {
 					error = 0;
 					chain->bref.flags |=
-					    HAMMER2_BREF_FLAG_EMERG_MIP;
+						HAMMER2_BREF_FLAG_EMERG_MIP;
 				} else if (error == 0) {
 					chain->bref.flags &=
-					    ~HAMMER2_BREF_FLAG_EMERG_MIP;
+						~HAMMER2_BREF_FLAG_EMERG_MIP;
 				}
 			}
 			if (dedup_off)
@@ -1563,7 +1577,8 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	 * This code also handles bytes == 0 (most dirents).
 	 */
 	if (chain->bref.type == HAMMER2_BREF_TYPE_DATA &&
-	    (flags & HAMMER2_MODIFY_OPTDATA) && chain->data == NULL) {
+	    (flags & HAMMER2_MODIFY_OPTDATA) &&
+	    chain->data == NULL) {
 		if (dedup_off == 0) {
 			KKASSERT(chain->dio == NULL);
 			goto skip;
@@ -1588,7 +1603,7 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	}
 
 	/* Instantiate data buffer and possibly execute COW operation. */
-	switch (chain->bref.type) {
+	switch(chain->bref.type) {
 	case HAMMER2_BREF_TYPE_VOLUME:
 	case HAMMER2_BREF_TYPE_FREEMAP:
 		/* The data is embedded, no copy-on-write operation needed. */
@@ -1684,6 +1699,7 @@ hammer2_chain_modify(hammer2_chain_t *chain, hammer2_tid_t mtid,
 	default:
 		hpanic("bad blockref type %d", chain->bref.type);
 		break;
+
 	}
 skip:
 	/*
@@ -1702,7 +1718,7 @@ skip:
  */
 int
 hammer2_chain_modify_ip(hammer2_inode_t *ip, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags)
+			hammer2_tid_t mtid, int flags)
 {
 	int error;
 
@@ -1742,9 +1758,10 @@ struct hammer2_chain_find_info {
 static int hammer2_chain_find_cmp(hammer2_chain_t *, void *);
 static int hammer2_chain_find_callback(hammer2_chain_t *, void *);
 
-static hammer2_chain_t *
+static
+hammer2_chain_t *
 hammer2_chain_find(hammer2_chain_t *parent, hammer2_key_t *key_nextp,
-    hammer2_key_t key_beg, hammer2_key_t key_end)
+			  hammer2_key_t key_beg, hammer2_key_t key_end)
 {
 	struct hammer2_chain_find_info info;
 
@@ -1765,24 +1782,26 @@ hammer2_chain_find(hammer2_chain_t *parent, hammer2_key_t *key_nextp,
 	return (info.best);
 }
 
-
-static int
+static
+int
 hammer2_chain_find_cmp(hammer2_chain_t *child, void *data)
 {
 	struct hammer2_chain_find_info *info = data;
-	hammer2_key_t child_beg, child_end;
+	hammer2_key_t child_beg;
+	hammer2_key_t child_end;
 
 	child_beg = child->bref.key;
 	child_end = child_beg + ((hammer2_key_t)1 << child->bref.keybits) - 1;
 
 	if (child_end < info->key_beg)
-		return (-1);
+		return(-1);
 	if (child_beg > info->key_end)
-		return (1);
-	return (0);
+		return(1);
+	return(0);
 }
 
-static int
+static
+int
 hammer2_chain_find_callback(hammer2_chain_t *child, void *data)
 {
 	struct hammer2_chain_find_info *info = data;
@@ -1792,7 +1811,7 @@ hammer2_chain_find_callback(hammer2_chain_t *child, void *data)
 	if ((best = info->best) == NULL) {
 		info->best = child;
 	} else if (best->bref.key <= info->key_beg &&
-	    child->bref.key <= info->key_beg) {
+		   child->bref.key <= info->key_beg) {
 		KKASSERT(0);
 	} else if (child->bref.key < best->bref.key) {
 		info->best = child;
@@ -1809,9 +1828,8 @@ hammer2_chain_find_callback(hammer2_chain_t *child, void *data)
 	if (child_end && (info->key_next > child_end || info->key_next == 0))
 		info->key_next = child_end;
 
-	return (0);
+	return(0);
 }
-
 
 /*
  * Retrieve the specified chain from a media blockref, creating the
@@ -1833,7 +1851,7 @@ hammer2_chain_find_callback(hammer2_chain_t *child, void *data)
  */
 static hammer2_chain_t *
 hammer2_chain_get(hammer2_chain_t *parent, int generation,
-    hammer2_blockref_t *bref, int how)
+		  hammer2_blockref_t *bref, int how)
 {
 	hammer2_dev_t *hmp = parent->hmp;
 	hammer2_chain_t *chain;
@@ -1868,7 +1886,9 @@ hammer2_chain_get(hammer2_chain_t *parent, int generation,
 	 */
 	KKASSERT(parent->refs > 0);
 	error = hammer2_chain_insert(parent, chain,
-	    HAMMER2_CHAIN_INSERT_SPIN | HAMMER2_CHAIN_INSERT_RACE, generation);
+				     HAMMER2_CHAIN_INSERT_SPIN |
+				     HAMMER2_CHAIN_INSERT_RACE,
+				     generation);
 	if (error) {
 		KKASSERT((chain->flags & HAMMER2_CHAIN_ONRBTREE) == 0);
 		hammer2_chain_unlock(chain);
@@ -2012,7 +2032,7 @@ hammer2_chain_repparent(hammer2_chain_t **chainp, int flags)
 	 */
 	hammer2_spin_init(&reptrack.spin, "h2reptrk");
 	reptrack.chain = parent;
-	hammer2_chain_ref(parent); /* for the reptrack */
+	hammer2_chain_ref(parent);		/* for the reptrack */
 
 	hammer2_spin_ex(&parent->core.spin);
 	reptrack.next = parent->core.reptrack;
@@ -2056,8 +2076,8 @@ hammer2_chain_repparent(hammer2_chain_t **chainp, int flags)
 	*repp = reptrack.next;
 	hammer2_spin_unex(&parent->core.spin);
 
-	hammer2_chain_drop(parent); /* reptrack ref */
-	*chainp = parent; /* return parent lock+ref */
+	hammer2_chain_drop(parent);	/* reptrack ref */
+	*chainp = parent;		/* return parent lock+ref */
 
 	return (parent);
 }
@@ -2075,7 +2095,8 @@ hammer2_chain_repparent(hammer2_chain_t **chainp, int flags)
  * where the chains underneath the node being deleted are given a new parent
  * above the node being deleted.
  */
-static void
+static
+void
 hammer2_chain_repchange(hammer2_chain_t *parent, hammer2_chain_t *chain)
 {
 	struct hammer2_reptrack *reptrack;
@@ -2095,11 +2116,11 @@ hammer2_chain_repchange(hammer2_chain_t *parent, hammer2_chain_t *chain)
 		reptrack->chain = parent;
 		reptrack->next = parent->core.reptrack;
 		parent->core.reptrack = reptrack;
-		hammer2_chain_ref(parent); /* reptrack */
+		hammer2_chain_ref(parent);		/* reptrack */
 
 		hammer2_spin_unex(&chain->core.spin);
 		hammer2_spin_unex(&parent->core.spin);
-		hammer2_chain_drop(chain); /* reptrack */
+		hammer2_chain_drop(chain);		/* reptrack */
 	}
 }
 
@@ -2151,7 +2172,8 @@ hammer2_chain_repchange(hammer2_chain_t *parent, hammer2_chain_t *chain)
  */
 hammer2_chain_t *
 hammer2_chain_lookup(hammer2_chain_t **parentp, hammer2_key_t *key_nextp,
-    hammer2_key_t key_beg, hammer2_key_t key_end, int *errorp, int flags)
+		     hammer2_key_t key_beg, hammer2_key_t key_end,
+		     int *errorp, int flags)
 {
 	hammer2_chain_t *chain, *parent;
 	hammer2_blockref_t bsave, *base, *bref;
@@ -2186,10 +2208,10 @@ hammer2_chain_lookup(hammer2_chain_t **parentp, hammer2_key_t *key_nextp,
 	*errorp = 0;
 
 	while (parent->bref.type == HAMMER2_BREF_TYPE_INDIRECT ||
-	    parent->bref.type == HAMMER2_BREF_TYPE_FREEMAP_NODE) {
+	       parent->bref.type == HAMMER2_BREF_TYPE_FREEMAP_NODE) {
 		scan_beg = parent->bref.key;
 		scan_end = scan_beg +
-		    ((hammer2_key_t)1 << parent->bref.keybits) - 1;
+			   ((hammer2_key_t)1 << parent->bref.keybits) - 1;
 		if ((parent->flags & HAMMER2_CHAIN_DELETED) == 0)
 			if (key_beg >= scan_beg && key_end <= scan_end)
 				break;
@@ -2203,13 +2225,13 @@ again:
 	 * MATCHIND case that does not require parent->data (do prior to
 	 * parent->error check).
 	 */
-	switch (parent->bref.type) {
+	switch(parent->bref.type) {
 	case HAMMER2_BREF_TYPE_FREEMAP_NODE:
 	case HAMMER2_BREF_TYPE_INDIRECT:
 		if (flags & HAMMER2_LOOKUP_MATCHIND) {
 			scan_beg = parent->bref.key;
 			scan_end = scan_beg +
-			    ((hammer2_key_t)1 << parent->bref.keybits) - 1;
+			       ((hammer2_key_t)1 << parent->bref.keybits) - 1;
 			if (key_beg == scan_beg && key_end == scan_end) {
 				chain = parent;
 				hammer2_chain_ref(chain);
@@ -2237,7 +2259,7 @@ again:
 	 * Locate the blockref array.  Currently we do a fully associative
 	 * search through the array.
 	 */
-	switch (parent->bref.type) {
+	switch(parent->bref.type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		/*
 		 * Special shortcut for embedded data returns the inode
@@ -2259,8 +2281,8 @@ again:
 				goto done;
 			}
 			hammer2_chain_ref(parent);
-			hammer2_chain_lock(parent,
-			    how_always | HAMMER2_RESOLVE_LOCKAGAIN);
+			hammer2_chain_lock(parent, how_always |
+						   HAMMER2_RESOLVE_LOCKAGAIN);
 			*key_nextp = key_end + 1;
 			return (parent);
 		}
@@ -2310,8 +2332,10 @@ again:
 
 	/* Combined search. */
 	hammer2_spin_ex(&parent->core.spin);
-	chain = hammer2_combined_find(parent, base, count, key_nextp, key_beg,
-	    key_end, &bref);
+	chain = hammer2_combined_find(parent, base, count,
+				      key_nextp,
+				      key_beg, key_end,
+				      &bref);
 	generation = parent->core.generation;
 
 	/* Exhausted parent chain, iterate. */
@@ -2331,7 +2355,7 @@ again:
 		 * iteration, otherwise go up one level and loop.
 		 */
 		key_beg = parent->bref.key +
-		    ((hammer2_key_t)1 << parent->bref.keybits);
+			  ((hammer2_key_t)1 << parent->bref.keybits);
 		if (key_beg == 0 || key_beg > key_end)
 			return (NULL);
 		parent = hammer2_chain_repparent(parentp, how_maybe);
@@ -2354,6 +2378,7 @@ again:
 	} else {
 		hammer2_chain_ref(chain);
 		hammer2_spin_unex(&parent->core.spin);
+
 		/*
 		 * chain is referenced but not locked.  We must lock the
 		 * chain to obtain definitive state.
@@ -2372,6 +2397,7 @@ again:
 		chain = NULL;
 		goto again;
 	}
+
 
 	/*
 	 * Skip deleted chains (XXX cache 'i' end-of-block-array?)
@@ -2392,7 +2418,7 @@ again:
 		chain = NULL;
 		key_beg = *key_nextp;
 		if (key_beg == 0 || key_beg > key_end)
-			return (NULL);
+			return(NULL);
 		goto again;
 	}
 
@@ -2450,12 +2476,13 @@ done:
  */
 hammer2_chain_t *
 hammer2_chain_next(hammer2_chain_t **parentp, hammer2_chain_t *chain,
-		   hammer2_key_t *key_nextp, hammer2_key_t key_beg, hammer2_key_t key_end,
+		   hammer2_key_t *key_nextp,
+		   hammer2_key_t key_beg, hammer2_key_t key_end,
 		   int *errorp, int flags)
 {
 	hammer2_chain_t *parent;
 	int how_maybe;
-	
+
 	/* Calculate locking flags for upward recursion. */
 	how_maybe = HAMMER2_RESOLVE_MAYBE;
 	if (flags & HAMMER2_LOOKUP_SHARED)
@@ -2538,10 +2565,13 @@ hammer2_chain_next(hammer2_chain_t **parentp, hammer2_chain_t *chain,
  */
 int
 hammer2_chain_scan(hammer2_chain_t *parent, hammer2_chain_t **chainp,
-    hammer2_blockref_t *bref, int *firstp, int flags)
+		   hammer2_blockref_t *bref, int *firstp,
+		   int flags)
 {
-	hammer2_blockref_t *base, *bref_ptr;
-	hammer2_key_t key, next_key;
+	hammer2_blockref_t *base;
+	hammer2_blockref_t *bref_ptr;
+	hammer2_key_t key;
+	hammer2_key_t next_key;
 	hammer2_chain_t *chain = NULL;
 	int how, generation, count = 0, error = 0, maxloops = 300000;
 
@@ -2590,7 +2620,7 @@ again:
 	 * Locate the blockref array.  Currently we do a fully associative
 	 * search through the array.
 	 */
-	switch (parent->bref.type) {
+	switch(parent->bref.type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		/*
 		 * An inode with embedded data has no sub-chains.
@@ -2649,8 +2679,10 @@ again:
 	next_key = 0;
 	bref_ptr = NULL;
 	hammer2_spin_ex(&parent->core.spin);
-	chain = hammer2_combined_find(parent, base, count, &next_key, key,
-	    HAMMER2_KEY_MAX, &bref_ptr);
+	chain = hammer2_combined_find(parent, base, count,
+				      &next_key,
+				      key, HAMMER2_KEY_MAX,
+				      &bref_ptr);
 	generation = parent->core.generation;
 
 	/* Exhausted parent chain, we're done. */
@@ -2666,7 +2698,7 @@ again:
 
 	/* Selected from blockref or in-memory chain. */
 	if (chain == NULL) {
-		switch (bref->type) {
+		switch(bref->type) {
 		case HAMMER2_BREF_TYPE_INODE:
 		case HAMMER2_BREF_TYPE_FREEMAP_NODE:
 		case HAMMER2_BREF_TYPE_INDIRECT:
@@ -2674,8 +2706,8 @@ again:
 		case HAMMER2_BREF_TYPE_FREEMAP:
 			/* Recursion, always get the chain. */
 			hammer2_spin_unex(&parent->core.spin);
-			chain = hammer2_chain_get(parent, generation, bref,
-			    how);
+			chain = hammer2_chain_get(parent, generation,
+						  bref, how);
 			if (chain == NULL)
 				goto again;
 			break;
@@ -2696,8 +2728,9 @@ again:
 		hammer2_spin_unex(&parent->core.spin);
 		hammer2_chain_lock(chain, how);
 	}
-	if (chain && (bcmp(bref, &chain->bref, sizeof(*bref)) ||
-	    chain->parent != parent)) {
+	if (chain &&
+	    (bcmp(bref, &chain->bref, sizeof(*bref)) ||
+	     chain->parent != parent)) {
 		hammer2_chain_unlock(chain);
 		hammer2_chain_drop(chain);
 		chain = NULL;
@@ -2721,6 +2754,7 @@ again:
 		hammer2_chain_unlock(chain);
 		hammer2_chain_drop(chain);
 		chain = NULL;
+
 		key = next_key;
 		if (key == 0) {
 			error |= HAMMER2_ERROR_EOF;
@@ -2778,9 +2812,9 @@ done:
  */
 int
 hammer2_chain_create(hammer2_chain_t **parentp, hammer2_chain_t **chainp,
-    hammer2_dev_t *hmp, hammer2_pfs_t *pmp, int methods, hammer2_key_t key,
-    int keybits, int type, size_t bytes, hammer2_tid_t mtid,
-    hammer2_off_t dedup_off, int flags)
+		     hammer2_dev_t *hmp, hammer2_pfs_t *pmp, int methods,
+		     hammer2_key_t key, int keybits, int type, size_t bytes,
+		     hammer2_tid_t mtid, hammer2_off_t dedup_off, int flags)
 {
 	hammer2_chain_t *chain, *parent, *nparent;
 	hammer2_blockref_t *base, dummy;
@@ -2838,7 +2872,7 @@ hammer2_chain_create(hammer2_chain_t **parentp, hammer2_chain_t **chainp,
 		 * Set INITIAL to optimize I/O.  The flag will generally be
 		 * processed when we call hammer2_chain_modify().
 		 */
-		switch (type) {
+		switch(type) {
 		case HAMMER2_BREF_TYPE_VOLUME:
 		case HAMMER2_BREF_TYPE_FREEMAP:
 			hpanic("called with volume type");
@@ -2896,7 +2930,7 @@ again:
 	if (--maxloops == 0)
 		hpanic("maxloops");
 
-	switch (parent->bref.type) {
+	switch(parent->bref.type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		if ((parent->data->ipdata.meta.op_flags &
 		    HAMMER2_OPFLAG_DIRECTDATA) != 0)
@@ -2905,7 +2939,7 @@ again:
 			    (long long)parent->bref.key,
 			    (long long)chain->bref.key);
 		KKASSERT((parent->data->ipdata.meta.op_flags &
-		    HAMMER2_OPFLAG_DIRECTDATA) == 0);
+			  HAMMER2_OPFLAG_DIRECTDATA) == 0);
 		KKASSERT(parent->data != NULL);
 		base = &parent->data->ipdata.u.blockset.blockref[0];
 		count = HAMMER2_SET_COUNT;
@@ -2938,7 +2972,7 @@ again:
 		hammer2_chain_countbrefs(parent, base, count);
 
 	KASSERTMSG(parent->core.live_count >= 0 &&
-	    parent->core.live_count <= count,
+		parent->core.live_count <= count,
 	    "bad live_count %d/%d (%02x, %d)",
 	    parent->core.live_count, count, parent->bref.type, parent->bytes);
 
@@ -2953,8 +2987,9 @@ again:
 	 */
 	if (parent->core.live_count == count) {
 		KKASSERT((flags & HAMMER2_INSERT_SAMEPARENT) == 0);
+
 		nparent = hammer2_chain_create_indirect(parent, key, keybits,
-		    mtid, type, &error);
+							mtid, type, &error);
 		if (nparent == NULL) {
 			if (allocated)
 				hammer2_chain_drop(chain);
@@ -2983,7 +3018,9 @@ skip:
 	if (parent) {
 		KKASSERT(parent->core.live_count < count);
 		hammer2_chain_insert(parent, chain,
-		    HAMMER2_CHAIN_INSERT_SPIN | HAMMER2_CHAIN_INSERT_LIVE, 0);
+				     HAMMER2_CHAIN_INSERT_SPIN |
+				     HAMMER2_CHAIN_INSERT_LIVE,
+				     0);
 	}
 
 	if (allocated) {
@@ -3001,13 +3038,13 @@ skip:
 		 * Data for all other bref types is expected to be
 		 * instantiated (INODE, LEAF).
 		 */
-		switch (chain->bref.type) {
+		switch(chain->bref.type) {
 		case HAMMER2_BREF_TYPE_DATA:
 		case HAMMER2_BREF_TYPE_FREEMAP_LEAF:
 		case HAMMER2_BREF_TYPE_DIRENT:
 		case HAMMER2_BREF_TYPE_INODE:
 			error = hammer2_chain_modify(chain, mtid, dedup_off,
-			    HAMMER2_MODIFY_OPTDATA);
+						     HAMMER2_MODIFY_OPTDATA);
 			break;
 		default:
 			/*
@@ -3036,6 +3073,7 @@ skip:
 	 */
 	if (parent)
 		hammer2_chain_setflush(parent);
+
 done:
 	*chainp = chain;
 
@@ -3069,7 +3107,7 @@ done:
  */
 static void
 hammer2_chain_rename(hammer2_chain_t **parentp, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags)
+		     hammer2_tid_t mtid, int flags)
 {
 	hammer2_blockref_t *bref;
 	hammer2_chain_t *parent;
@@ -3106,8 +3144,9 @@ hammer2_chain_rename(hammer2_chain_t **parentp, hammer2_chain_t *chain,
 		KKASSERT(parent->error == 0);
 
 		hammer2_chain_create(parentp, &chain, NULL, chain->pmp,
-		    HAMMER2_METH_DEFAULT, bref->key, bref->keybits, bref->type,
-		    chain->bytes, mtid, 0, flags);
+				     HAMMER2_METH_DEFAULT,
+				     bref->key, bref->keybits, bref->type,
+				     chain->bytes, mtid, 0, flags);
 		KKASSERT(chain->flags & HAMMER2_CHAIN_UPDATE);
 		hammer2_chain_setflush(*parentp);
 	}
@@ -3139,7 +3178,8 @@ hammer2_chain_rename(hammer2_chain_t **parentp, hammer2_chain_t *chain,
  */
 static void
 hammer2_chain_rename_obref(hammer2_chain_t **parentp, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags, hammer2_blockref_t *obref)
+			   hammer2_tid_t mtid, int flags,
+			   hammer2_blockref_t *obref)
 {
 	hammer2_blockref_t *tbase;
 	int tcount;
@@ -3169,7 +3209,8 @@ hammer2_chain_rename_obref(hammer2_chain_t **parentp, hammer2_chain_t *chain,
  */
 static int
 _hammer2_chain_delete_helper(hammer2_chain_t *parent, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags, hammer2_blockref_t *obref)
+			     hammer2_tid_t mtid, int flags,
+			     hammer2_blockref_t *obref)
 {
 	hammer2_blockref_t *base;
 	int count = 0, error = 0;
@@ -3204,7 +3245,7 @@ _hammer2_chain_delete_helper(hammer2_chain_t *parent, hammer2_chain_t *chain,
 		--parent->core.chain_count;
 		chain->parent = NULL;
 
-		switch (parent->bref.type) {
+		switch(parent->bref.type) {
 		case HAMMER2_BREF_TYPE_INODE:
 			/*
 			 * Access the inode's block array.  However, there
@@ -3228,7 +3269,8 @@ _hammer2_chain_delete_helper(hammer2_chain_t *parent, hammer2_chain_t *chain,
 			count = parent->bytes / sizeof(hammer2_blockref_t);
 			break;
 		case HAMMER2_BREF_TYPE_VOLUME:
-			base = &parent->data->voldata.sroot_blockset.blockref[0];
+			base = &parent->data->voldata.
+					sroot_blockset.blockref[0];
 			count = HAMMER2_SET_COUNT;
 			break;
 		case HAMMER2_BREF_TYPE_FREEMAP:
@@ -3399,12 +3441,13 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 			nbytes = HAMMER2_IND_BYTES_MIN;	/* 4KB = 32 entries */
 		else
 			nbytes = HAMMER2_IND_BYTES_NOM;	/* 16KB = ~8MB file */
+
 	} else {
 		nbytes = HAMMER2_IND_BYTES_NOM;
 	}
 	if (nbytes < count * sizeof(hammer2_blockref_t)) {
 		KKASSERT(for_type != HAMMER2_BREF_TYPE_FREEMAP_NODE &&
-		    for_type != HAMMER2_BREF_TYPE_FREEMAP_LEAF);
+			 for_type != HAMMER2_BREF_TYPE_FREEMAP_LEAF);
 		nbytes = count * sizeof(hammer2_blockref_t);
 	}
 	ncount = nbytes / sizeof(hammer2_blockref_t);
@@ -3419,20 +3462,20 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 	 * we need to create, and whether it is on the high-side or the
 	 * low-side.
 	 */
-	switch (for_type) {
+	switch(for_type) {
 	case HAMMER2_BREF_TYPE_FREEMAP_NODE:
 	case HAMMER2_BREF_TYPE_FREEMAP_LEAF:
 		keybits = hammer2_chain_indkey_freemap(parent, &key, keybits,
-		    base, count);
+						       base, count);
 		break;
 	case HAMMER2_BREF_TYPE_DATA:
-		keybits = hammer2_chain_indkey_file(parent, &key, keybits, base,
-		    count, ncount);
+		keybits = hammer2_chain_indkey_file(parent, &key, keybits,
+						    base, count, ncount);
 		break;
 	case HAMMER2_BREF_TYPE_DIRENT:
 	case HAMMER2_BREF_TYPE_INODE:
-		keybits = hammer2_chain_indkey_dir(parent, &key, keybits, base,
-		    count, ncount);
+		keybits = hammer2_chain_indkey_dir(parent, &key, keybits,
+						   base, count, ncount);
 		break;
 	default:
 		hpanic("illegal indirect block for blockref type %d", for_type);
@@ -3456,8 +3499,8 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 	dummy.keybits = keybits;
 	dummy.data_off = hammer2_getradix(nbytes);
 	dummy.methods =
-	    HAMMER2_ENC_CHECK(HAMMER2_DEC_CHECK(parent->bref.methods)) |
-	    HAMMER2_ENC_COMP(HAMMER2_COMP_NONE);
+		HAMMER2_ENC_CHECK(HAMMER2_DEC_CHECK(parent->bref.methods)) |
+		HAMMER2_ENC_COMP(HAMMER2_COMP_NONE);
 
 	ichain = hammer2_chain_alloc(hmp, parent->pmp, &dummy);
 	atomic_set_int(&ichain->flags, HAMMER2_CHAIN_INITIAL);
@@ -3491,7 +3534,7 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 	 */
 	key_beg = 0;
 	key_end = HAMMER2_KEY_MAX;
-	key_next = 0; /* avoid gcc warnings */
+	key_next = 0;	/* avoid gcc warnings */
 	hammer2_spin_ex(&parent->core.spin);
 	loops = 0;
 	reason = 0;
@@ -3514,8 +3557,10 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 		 *	 cannot safely check its flagged / deletion status
 		 *	 until we lock it.
 		 */
-		chain = hammer2_combined_find(parent, base, count, &key_next,
-		    key_beg, key_end, &bref);
+		chain = hammer2_combined_find(parent, base, count,
+					      &key_next,
+					      key_beg, key_end,
+					      &bref);
 		generation = parent->core.generation;
 		if (bref == NULL)
 			break;
@@ -3549,7 +3594,7 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 			 */
 			hammer2_spin_unex(&parent->core.spin);
 			chain = hammer2_chain_get(parent, generation, &bsave,
-			    HAMMER2_RESOLVE_NEVER);
+						  HAMMER2_RESOLVE_NEVER);
 			if (chain == NULL) {
 				reason = 1;
 				hammer2_spin_ex(&parent->core.spin);
@@ -3593,7 +3638,7 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 		 *	    and will be able to properly find its next key.
 		 */
 		error = hammer2_chain_delete_obref(parent, chain, mtid, 0,
-		    &bsave);
+						   &bsave);
 		if (error)
 			hpanic("error %08x", error);
 		hammer2_chain_rename_obref(&ichain, chain, mtid, 0, &bsave);
@@ -3601,7 +3646,7 @@ hammer2_chain_create_indirect(hammer2_chain_t *parent, hammer2_key_t create_key,
 		hammer2_chain_drop(chain);
 		KKASSERT(parent->refs > 0);
 		chain = NULL;
-		base = NULL; /* safety */
+		base = NULL;	/* safety */
 		hammer2_spin_ex(&parent->core.spin);
 next_key_spinlocked:
 		if (--maxloops == 0)
@@ -3626,11 +3671,13 @@ next_key_spinlocked:
 	 * The insertion shouldn't race as this is a completely new block
 	 * and the parent is locked.
 	 */
-	base = NULL; /* safety, parent modify may change address */
+	base = NULL;	/* safety, parent modify may change address */
 	KKASSERT((ichain->flags & HAMMER2_CHAIN_ONRBTREE) == 0);
 	KKASSERT(parent->core.live_count < count);
 	hammer2_chain_insert(parent, ichain,
-	    HAMMER2_CHAIN_INSERT_SPIN | HAMMER2_CHAIN_INSERT_LIVE, 0);
+			     HAMMER2_CHAIN_INSERT_SPIN |
+			     HAMMER2_CHAIN_INSERT_LIVE,
+			     0);
 
 	/* Make sure flushes propogate after our manual insertion. */
 	hammer2_chain_setflush(ichain);
@@ -3652,7 +3699,7 @@ next_key_spinlocked:
 		parent = ichain;
 	}
 
-	return (parent);
+	return(parent);
 }
 
 /*
@@ -3663,10 +3710,15 @@ next_key_spinlocked:
  */
 int
 hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
-    hammer2_chain_t *chain)
+				   hammer2_chain_t *chain)
 {
-	hammer2_blockref_t *chain_base, *base, *bref, bsave;
-	hammer2_key_t key_next, key_beg, key_end;
+	hammer2_blockref_t *chain_base;
+	hammer2_blockref_t *base;
+	hammer2_blockref_t *bref;
+	hammer2_blockref_t bsave;
+	hammer2_key_t key_next;
+	hammer2_key_t key_beg;
+	hammer2_key_t key_end;
 	hammer2_chain_t *sub;
 	int generation, error;
 	unsigned int chain_count, count;
@@ -3684,8 +3736,9 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
 	 * (ignore deletion error)
 	 */
 	if (chain->core.live_count == 0 && RB_EMPTY(&chain->core.rbtree)) {
-		hammer2_chain_delete(parent, chain, chain->bref.modify_tid,
-		    HAMMER2_DELETE_PERMANENT);
+		hammer2_chain_delete(parent, chain,
+				     chain->bref.modify_tid,
+				     HAMMER2_DELETE_PERMANENT);
 		hammer2_chain_repchange(parent, chain);
 		return (1);
 	}
@@ -3748,8 +3801,9 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
 
 	chain->bref.embed.stats.inode_count = 0;
 	chain->bref.embed.stats.data_count = 0;
-	error = hammer2_chain_delete(parent, chain, chain->bref.modify_tid,
-	    HAMMER2_DELETE_PERMANENT);
+	error = hammer2_chain_delete(parent, chain,
+				     chain->bref.modify_tid,
+				     HAMMER2_DELETE_PERMANENT);
 	KKASSERT(error == 0);
 
 	/*
@@ -3767,7 +3821,9 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
 		chain_base = &chain->data->npdata[0];
 		chain_count = chain->bytes / sizeof(hammer2_blockref_t);
 		sub = hammer2_combined_find(chain, chain_base, chain_count,
-		    &key_next, key_beg, key_end, &bref);
+					    &key_next,
+					    key_beg, key_end,
+					    &bref);
 		generation = chain->core.generation;
 		if (bref == NULL)
 			break;
@@ -3781,7 +3837,7 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
 		} else {
 			hammer2_spin_unex(&chain->core.spin);
 			sub = hammer2_chain_get(chain, generation, &bsave,
-			    HAMMER2_RESOLVE_NEVER);
+						HAMMER2_RESOLVE_NEVER);
 			if (sub == NULL) {
 				hammer2_spin_ex(&chain->core.spin);
 				continue;
@@ -3793,14 +3849,16 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
 			hammer2_chain_unlock(sub);
 			hammer2_chain_drop(sub);
 			hammer2_spin_ex(&chain->core.spin);
-			sub = NULL; /* safety */
+			sub = NULL;	/* safety */
 			continue;
 		}
 		error = hammer2_chain_delete_obref(chain, sub,
-		    sub->bref.modify_tid, 0, &bsave);
+						   sub->bref.modify_tid, 0,
+						   &bsave);
 		KKASSERT(error == 0);
 		hammer2_chain_rename_obref(&parent, sub,
-		    sub->bref.modify_tid, HAMMER2_INSERT_SAMEPARENT, &bsave);
+				     sub->bref.modify_tid,
+				     HAMMER2_INSERT_SAMEPARENT, &bsave);
 		hammer2_chain_unlock(sub);
 		hammer2_chain_drop(sub);
 		hammer2_spin_ex(&chain->core.spin);
@@ -3832,11 +3890,14 @@ hammer2_chain_indirect_maintenance(hammer2_chain_t *parent,
  */
 int
 hammer2_chain_indkey_freemap(hammer2_chain_t *parent, hammer2_key_t *keyp,
-    int keybits, hammer2_blockref_t *base, int count)
+			     int keybits, hammer2_blockref_t *base, int count)
 {
 	hammer2_chain_t *chain;
 	hammer2_blockref_t *bref;
-	hammer2_key_t key, key_beg, key_end, key_next;
+	hammer2_key_t key;
+	hammer2_key_t key_beg;
+	hammer2_key_t key_end;
+	hammer2_key_t key_next;
 	int maxloops = 300000;
 
 	key = *keyp;
@@ -3892,7 +3953,7 @@ hammer2_chain_indkey_freemap(hammer2_chain_t *parent, hammer2_key_t *keyp,
 	 * Return the keybits for a higher-level FREEMAP_NODE covering
 	 * this node.
 	 */
-	switch (keybits) {
+	switch(keybits) {
 	case HAMMER2_FREEMAP_LEVEL0_RADIX:
 		keybits = HAMMER2_FREEMAP_LEVEL1_RADIX;
 		break;
@@ -3934,7 +3995,8 @@ hammer2_chain_indkey_freemap(hammer2_chain_t *parent, hammer2_key_t *keyp,
  */
 static int
 hammer2_chain_indkey_file(hammer2_chain_t *parent, hammer2_key_t *keyp,
-    int keybits, hammer2_blockref_t *base, int count, int ncount)
+			    int keybits, hammer2_blockref_t *base, int count,
+			    int ncount)
 {
 	hammer2_chain_t *chain;
 	hammer2_blockref_t *bref;
@@ -3998,7 +4060,7 @@ hammer2_chain_indkey_file(hammer2_chain_t *parent, hammer2_key_t *keyp,
 	 */
 	*keyp = key;
 
-	switch (ncount) {
+	switch(ncount) {
 	case HAMMER2_IND_COUNT_MIN:
 		nradix = HAMMER2_IND_RADIX_MIN - HAMMER2_BLOCKREF_RADIX;
 		break;
@@ -4038,12 +4100,19 @@ hammer2_chain_indkey_file(hammer2_chain_t *parent, hammer2_key_t *keyp,
  */
 static int
 hammer2_chain_indkey_dir(hammer2_chain_t *parent, hammer2_key_t *keyp,
-    int keybits, hammer2_blockref_t *base, int count, int ncount)
+			 int keybits, hammer2_blockref_t *base, int count,
+			 int ncount)
 {
 	hammer2_blockref_t *bref;
 	hammer2_chain_t	*chain;
-	hammer2_key_t key_beg, key_end, key_next, key;
-	int nkeybits, locount, hicount, maxloops = 300000;
+	hammer2_key_t key_beg;
+	hammer2_key_t key_end;
+	hammer2_key_t key_next;
+	hammer2_key_t key;
+	int nkeybits;
+	int locount;
+	int hicount;
+	int maxloops = 300000;
 
 	/*
 	 * NOTE: We can't take a shortcut here anymore for inodes because
@@ -4137,7 +4206,7 @@ hammer2_chain_indkey_dir(hammer2_chain_t *parent, hammer2_key_t *keyp,
 		key_beg = key_next;
 	}
 	hammer2_spin_unex(&parent->core.spin);
-	bref = NULL; /* now invalid (safety) */
+	bref = NULL;	/* now invalid (safety) */
 
 	/*
 	 * Adjust keybits to represent half of the full range calculated
@@ -4195,7 +4264,7 @@ hammer2_chain_indkey_dir(hammer2_chain_t *parent, hammer2_key_t *keyp,
  */
 int
 hammer2_chain_delete(hammer2_chain_t *parent, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags)
+		     hammer2_tid_t mtid, int flags)
 {
 	int error = 0;
 
@@ -4209,9 +4278,9 @@ hammer2_chain_delete(hammer2_chain_t *parent, hammer2_chain_t *chain,
 	 */
 	if ((chain->flags & HAMMER2_CHAIN_DELETED) == 0) {
 		KKASSERT((chain->flags & HAMMER2_CHAIN_DELETED) == 0 &&
-		    chain->parent == parent);
-		error = _hammer2_chain_delete_helper(parent, chain, mtid, flags,
-		    NULL);
+			 chain->parent == parent);
+		error = _hammer2_chain_delete_helper(parent, chain,
+						     mtid, flags, NULL);
 	}
 
 	/*
@@ -4233,7 +4302,8 @@ hammer2_chain_delete(hammer2_chain_t *parent, hammer2_chain_t *chain,
 
 static int
 hammer2_chain_delete_obref(hammer2_chain_t *parent, hammer2_chain_t *chain,
-    hammer2_tid_t mtid, int flags, hammer2_blockref_t *obref)
+		     hammer2_tid_t mtid, int flags,
+		     hammer2_blockref_t *obref)
 {
 	int error = 0;
 
@@ -4248,9 +4318,9 @@ hammer2_chain_delete_obref(hammer2_chain_t *parent, hammer2_chain_t *chain,
 	obref->type = HAMMER2_BREF_TYPE_EMPTY;
 	if ((chain->flags & HAMMER2_CHAIN_DELETED) == 0) {
 		KKASSERT((chain->flags & HAMMER2_CHAIN_DELETED) == 0 &&
-		    chain->parent == parent);
-		error = _hammer2_chain_delete_helper(parent, chain, mtid, flags,
-		    obref);
+			 chain->parent == parent);
+		error = _hammer2_chain_delete_helper(parent, chain,
+						     mtid, flags, obref);
 	}
 
 	/*
@@ -4283,12 +4353,15 @@ hammer2_chain_delete_obref(hammer2_chain_t *parent, hammer2_chain_t *chain,
  *	     held through the operation.
  */
 static int
-hammer2_base_find(hammer2_chain_t *parent, hammer2_blockref_t *base, int count,
-    hammer2_key_t *key_nextp, hammer2_key_t key_beg)
+hammer2_base_find(hammer2_chain_t *parent,
+		  hammer2_blockref_t *base, int count,
+		  hammer2_key_t *key_nextp,
+		  hammer2_key_t key_beg, hammer2_key_t key_end __unused)
 {
 	hammer2_blockref_t *scan;
 	hammer2_key_t scan_end;
-	int i, limit;
+	int i;
+	int limit;
 
 	/*
 	 * Require the live chain's already have their core's counted
@@ -4298,7 +4371,7 @@ hammer2_base_find(hammer2_chain_t *parent, hammer2_blockref_t *base, int count,
 
 	/* Degenerate case. */
 	if (count == 0 || base == NULL)
-		return (count);
+		return(count);
 
 	/*
 	 * Sequential optimization using parent->cache_index.  This is
@@ -4333,7 +4406,7 @@ hammer2_base_find(hammer2_chain_t *parent, hammer2_blockref_t *base, int count,
 	while (i < count) {
 		if (scan->type != HAMMER2_BREF_TYPE_EMPTY) {
 			scan_end = scan->key +
-			    ((hammer2_key_t)1 << scan->keybits) - 1;
+				   ((hammer2_key_t)1 << scan->keybits) - 1;
 			if (scan->key > key_beg || scan_end >= key_beg)
 				break;
 		}
@@ -4348,7 +4421,7 @@ hammer2_base_find(hammer2_chain_t *parent, hammer2_blockref_t *base, int count,
 			i = count;
 		} else {
 			scan_end = scan->key +
-			    ((hammer2_key_t)1 << scan->keybits);
+				   ((hammer2_key_t)1 << scan->keybits);
 			if (scan_end && (*key_nextp > scan_end ||
 			    *key_nextp == 0))
 				*key_nextp = scan_end;
@@ -4374,9 +4447,11 @@ hammer2_base_find(hammer2_chain_t *parent, hammer2_blockref_t *base, int count,
  *	     held through the operation.
  */
 static hammer2_chain_t *
-hammer2_combined_find(hammer2_chain_t *parent, hammer2_blockref_t *base,
-    int count, hammer2_key_t *key_nextp, hammer2_key_t key_beg,
-    hammer2_key_t key_end, hammer2_blockref_t **brefp)
+hammer2_combined_find(hammer2_chain_t *parent,
+		      hammer2_blockref_t *base, int count,
+		      hammer2_key_t *key_nextp,
+		      hammer2_key_t key_beg, hammer2_key_t key_end,
+		      hammer2_blockref_t **brefp)
 {
 	hammer2_chain_t *chain;
 	hammer2_blockref_t *bref;
@@ -4384,13 +4459,14 @@ hammer2_combined_find(hammer2_chain_t *parent, hammer2_blockref_t *base,
 
 	/* Lookup in block array and in rbtree. */
 	*key_nextp = key_end + 1;
-	i = hammer2_base_find(parent, base, count, key_nextp, key_beg);
+	i = hammer2_base_find(parent, base, count, key_nextp,
+			      key_beg, key_end);
 	chain = hammer2_chain_find(parent, key_nextp, key_beg, key_end);
 
 	/* Neither matched. */
 	if (i == count && chain == NULL) {
 		*brefp = NULL;
-		return (NULL);
+		return(NULL);
 	}
 
 	/* Only chain matched. */
@@ -4435,7 +4511,7 @@ found:
 	} else {
 		*brefp = bref;
 	}
-	return (chain);
+	return(chain);
 }
 
 /*
@@ -4446,8 +4522,10 @@ found:
  *	 need to be adjusted when we commit the media change.
  */
 void
-hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
-    int count, hammer2_chain_t *chain, hammer2_blockref_t *obref)
+hammer2_base_delete(hammer2_chain_t *parent,
+		    hammer2_blockref_t *base, int count,
+		    hammer2_chain_t *chain,
+		    hammer2_blockref_t *obref)
 {
 	hammer2_blockref_t *scan, *elm = &chain->bref;
 	hammer2_key_t key_next;
@@ -4460,9 +4538,9 @@ hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
 	 *     re-flushed in some cases.
 	 */
 	key_next = 0; /* max range */
-	i = hammer2_base_find(parent, base, count, &key_next, elm->key);
+	i = hammer2_base_find(parent, base, count, &key_next,
+			      elm->key, elm->key);
 	scan = &base[i];
-
 	if (i == count || scan->type == HAMMER2_BREF_TYPE_EMPTY ||
 	    scan->key != elm->key ||
 	    ((chain->flags & HAMMER2_CHAIN_BLKMAPUPD) == 0 &&
@@ -4482,14 +4560,14 @@ hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
 		parent->bref.embed.stats.data_count -= (hammer2_off_t)1 <<
 		    (int)(scan->data_off & HAMMER2_OFF_MASK_RADIX);
 
-	switch (scan->type) {
+	switch(scan->type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		--parent->bref.embed.stats.inode_count;
 		/* fall through */
 	case HAMMER2_BREF_TYPE_DATA:
 		if (parent->bref.leaf_count == HAMMER2_BLOCKREF_LEAF_MAX) {
 			atomic_set_int(&chain->flags,
-			    HAMMER2_CHAIN_HINT_LEAF_COUNT);
+				       HAMMER2_CHAIN_HINT_LEAF_COUNT);
 		} else {
 			if (parent->bref.leaf_count)
 				--parent->bref.leaf_count;
@@ -4498,15 +4576,15 @@ hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
 	case HAMMER2_BREF_TYPE_INDIRECT:
 		if (scan->type != HAMMER2_BREF_TYPE_DATA) {
 			parent->bref.embed.stats.data_count -=
-			    scan->embed.stats.data_count;
+				scan->embed.stats.data_count;
 			parent->bref.embed.stats.inode_count -=
-			    scan->embed.stats.inode_count;
+				scan->embed.stats.inode_count;
 		}
 		if (scan->type == HAMMER2_BREF_TYPE_INODE)
 			break;
 		if (parent->bref.leaf_count == HAMMER2_BLOCKREF_LEAF_MAX) {
 			atomic_set_int(&chain->flags,
-			    HAMMER2_CHAIN_HINT_LEAF_COUNT);
+				       HAMMER2_CHAIN_HINT_LEAF_COUNT);
 		} else {
 			if (parent->bref.leaf_count <= scan->leaf_count)
 				parent->bref.leaf_count = 0;
@@ -4517,7 +4595,7 @@ hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
 	case HAMMER2_BREF_TYPE_DIRENT:
 		if (parent->bref.leaf_count == HAMMER2_BLOCKREF_LEAF_MAX) {
 			atomic_set_int(&chain->flags,
-			    HAMMER2_CHAIN_HINT_LEAF_COUNT);
+				       HAMMER2_CHAIN_HINT_LEAF_COUNT);
 		} else {
 			if (parent->bref.leaf_count)
 				--parent->bref.leaf_count;
@@ -4551,11 +4629,17 @@ hammer2_base_delete(hammer2_chain_t *parent, hammer2_blockref_t *base,
  *	 need to be adjusted when we commit the media change.
  */
 void
-hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
-    int count, hammer2_chain_t *chain, hammer2_blockref_t *elm)
+hammer2_base_insert(hammer2_chain_t *parent,
+		    hammer2_blockref_t *base, int count,
+		    hammer2_chain_t *chain, hammer2_blockref_t *elm)
 {
-	hammer2_key_t key_next, xkey;
-	int i, j, k, l, u = 1;
+	hammer2_key_t key_next;
+	hammer2_key_t xkey;
+	int i;
+	int j;
+	int k;
+	int l;
+	int u = 1;
 
 	/*
 	 * Insert new element.  Expect the element to not already exist
@@ -4565,7 +4649,8 @@ hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
 	 *     re-flushed in some cases.
 	 */
 	key_next = 0; /* max range */
-	i = hammer2_base_find(parent, base, count, &key_next, elm->key);
+	i = hammer2_base_find(parent, base, count, &key_next,
+			      elm->key, elm->key);
 
 	/*
 	 * Shortcut fill optimization, typical ordered insertion(s) may not
@@ -4582,7 +4667,7 @@ hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
 		parent->bref.embed.stats.data_count += (hammer2_off_t)1 <<
 		    (int)(elm->data_off & HAMMER2_OFF_MASK_RADIX);
 
-	switch (elm->type) {
+	switch(elm->type) {
 	case HAMMER2_BREF_TYPE_INODE:
 		++parent->bref.embed.stats.inode_count;
 		/* fall through */
@@ -4593,9 +4678,9 @@ hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
 	case HAMMER2_BREF_TYPE_INDIRECT:
 		if (elm->type != HAMMER2_BREF_TYPE_DATA) {
 			parent->bref.embed.stats.data_count +=
-			    elm->embed.stats.data_count;
+				elm->embed.stats.data_count;
 			parent->bref.embed.stats.inode_count +=
-			    elm->embed.stats.inode_count;
+				elm->embed.stats.inode_count;
 		}
 		if (elm->type == HAMMER2_BREF_TYPE_INODE)
 			break;
@@ -4640,7 +4725,7 @@ hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
 				base[j] = *elm;
 			} else {
 				memmove(&base[j], &base[j+1],
-				    (i - j - 1) * sizeof(*base));
+				      (i - j - 1) * sizeof(*base));
 				base[i - 1] = *elm;
 			}
 			goto validate;
@@ -4648,8 +4733,9 @@ hammer2_base_insert(hammer2_chain_t *parent, hammer2_blockref_t *base,
 		++k;
 		if (k < count && base[k].type == HAMMER2_BREF_TYPE_EMPTY) {
 			memmove(&base[i+1], &base[i],
-			    (k - i) * sizeof(hammer2_blockref_t));
+			      (k - i) * sizeof(hammer2_blockref_t));
 			base[i] = *elm;
+
 			/*
 			 * We can only update parent->core.live_zero for live
 			 * chains.
@@ -4668,7 +4754,7 @@ validate:
 	for (l = 0; l < count; ++l) {
 		if (base[l].type != HAMMER2_BREF_TYPE_EMPTY) {
 			key_next = base[l].key +
-			    ((hammer2_key_t)1 << base[l].keybits) - 1;
+				   ((hammer2_key_t)1 << base[l].keybits) - 1;
 			break;
 		}
 	}
@@ -4678,10 +4764,13 @@ validate:
 				hpanic("insert %d %d,%d,%d fail %d",
 				    u, i, j, k, l);
 			key_next = base[l].key +
-			    ((hammer2_key_t)1 << base[l].keybits) - 1;
+				   ((hammer2_key_t)1 << base[l].keybits) - 1;
+
 		}
 	}
+
 }
+
 
 /*
  * Set the check data for a chain.  This can be a heavy-weight operation
@@ -4693,18 +4782,18 @@ hammer2_chain_setcheck(hammer2_chain_t *chain, void *bdata)
 {
 	atomic_clear_int(&chain->flags, HAMMER2_CHAIN_NOTTESTED);
 
-	switch (HAMMER2_DEC_CHECK(chain->bref.methods)) {
+	switch(HAMMER2_DEC_CHECK(chain->bref.methods)) {
 	case HAMMER2_CHECK_NONE:
 		break;
 	case HAMMER2_CHECK_DISABLED:
 		break;
 	case HAMMER2_CHECK_ISCSI32:
 		chain->bref.check.iscsi32.value =
-		    hammer2_icrc32(bdata, chain->bytes);
+			hammer2_icrc32(bdata, chain->bytes);
 		break;
 	case HAMMER2_CHECK_XXHASH64:
 		chain->bref.check.xxhash64.value =
-		    XXH64(bdata, chain->bytes, XXH_HAMMER2_SEED);
+			XXH64(bdata, chain->bytes, XXH_HAMMER2_SEED);
 		break;
 	case HAMMER2_CHECK_SHA192:
 		{
@@ -4718,19 +4807,18 @@ hammer2_chain_setcheck(hammer2_chain_t *chain, void *bdata)
 		SHA256Final(u.digest, &hash_ctx);
 		u.digest64[2] ^= u.digest64[3];
 		bcopy(u.digest, chain->bref.check.sha192.data,
-		    sizeof(chain->bref.check.sha192.data));
+			      sizeof(chain->bref.check.sha192.data));
 		}
 		break;
 	case HAMMER2_CHECK_FREEMAP:
 		chain->bref.check.freemap.icrc32 =
-		    hammer2_icrc32(bdata, chain->bytes);
+			hammer2_icrc32(bdata, chain->bytes);
 		break;
 	default:
 		hpanic("bad check type %02x", chain->bref.methods);
 		break;
 	}
 }
-
 
 /*
  * Characterize a failed check code and try to trace back to the inode.
@@ -4814,7 +4902,7 @@ hammer2_chain_testcheck(const hammer2_chain_t *chain, void *bdata)
 	if (chain->flags & HAMMER2_CHAIN_NOTTESTED)
 		return (1);
 
-	switch (HAMMER2_DEC_CHECK(chain->bref.methods)) {
+	switch(HAMMER2_DEC_CHECK(chain->bref.methods)) {
 	case HAMMER2_CHECK_NONE:
 		r = 1;
 		break;
@@ -4889,8 +4977,9 @@ hammer2_chain_testcheck(const hammer2_chain_t *chain, void *bdata)
  * not be passed to this function.
  */
 int
-hammer2_chain_inode_find(hammer2_pfs_t *pmp, hammer2_key_t inum, int clindex,
-    int flags, hammer2_chain_t **parentp, hammer2_chain_t **chainp)
+hammer2_chain_inode_find(hammer2_pfs_t *pmp, hammer2_key_t inum,
+			 int clindex, int flags,
+			 hammer2_chain_t **parentp, hammer2_chain_t **chainp)
 {
 	hammer2_inode_t *ip;
 	hammer2_chain_t *parent, *rchain;
@@ -4900,7 +4989,7 @@ hammer2_chain_inode_find(hammer2_pfs_t *pmp, hammer2_key_t inum, int clindex,
 	KKASSERT((flags & HAMMER2_LOOKUP_NODATA) == 0);
 
 	resolve_flags = (flags & HAMMER2_LOOKUP_SHARED) ?
-	    HAMMER2_RESOLVE_SHARED : 0;
+			HAMMER2_RESOLVE_SHARED : 0;
 
 	/* Caller expects us to replace these. */
 	if (*chainp) {
@@ -4922,8 +5011,9 @@ hammer2_chain_inode_find(hammer2_pfs_t *pmp, hammer2_key_t inum, int clindex,
 	 */
 	ip = hammer2_inode_lookup(pmp, inum);
 	if (ip) {
-		*chainp = hammer2_inode_chain_and_parent(ip, clindex, parentp,
-		    resolve_flags);
+		*chainp = hammer2_inode_chain_and_parent(ip, clindex,
+						       parentp,
+						       resolve_flags);
 		hammer2_inode_drop(ip);
 		if (*chainp)
 			return ((*chainp)->error);
@@ -4945,8 +5035,9 @@ hammer2_chain_inode_find(hammer2_pfs_t *pmp, hammer2_key_t inum, int clindex,
 		 * NOTE: rchain can be returned as NULL even if error == 0
 		 *	 (i.e. not found)
 		 */
-		rchain = hammer2_chain_lookup(&parent, &key_dummy, inum, inum,
-		    &error, flags);
+		rchain = hammer2_chain_lookup(&parent, &key_dummy,
+					      inum, inum,
+					      &error, flags);
 		/*
 		 * Propagate a chain-specific error to caller.
 		 *
@@ -5012,7 +5103,7 @@ hammer2_chain_bulkdrop(hammer2_chain_t *copy)
  */
 int
 hammer2_chain_dirent_test(const hammer2_chain_t *chain, const char *name,
-    size_t name_len)
+			  size_t name_len)
 {
 	const hammer2_inode_data_t *ripdata;
 
@@ -5055,7 +5146,7 @@ hammer2_dump_chain(hammer2_chain_t *chain, int tab, int bi, int depth, char pfx)
 	    (long long)chain->bref.modify_tid);
 
 	printf("%*.*s      (%s) flags %08x refs %d error %08x",
-	    tab, tab, "",
+			tab, tab, "",
 	    (chain->bref.type == HAMMER2_BREF_TYPE_INODE && chain->data) ?
 	    (char *)chain->data->ipdata.filename : "?",
 	    chain->flags, chain->refs, chain->error);
@@ -5069,7 +5160,7 @@ hammer2_dump_chain(hammer2_chain_t *chain, int tab, int bi, int depth, char pfx)
 		}
 		if (chain->bref.type == HAMMER2_BREF_TYPE_INODE && chain->data)
 			printf("%*.*s}(%s)\n", tab, tab, "",
-			    chain->data->ipdata.filename);
+				chain->data->ipdata.filename);
 		else
 			printf("%*.*s}\n", tab, tab, "");
 	} else {

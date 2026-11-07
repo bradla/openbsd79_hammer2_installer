@@ -223,7 +223,7 @@ hammer2_io_getblk(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
 
 	if (dio->pbase == (lbase & ~HAMMER2_OFF_MASK_RADIX) &&
 	    dio->psize == lsize) {
-		switch (op) {
+		switch(op) {
 		case HAMMER2_DOP_NEW:
 		case HAMMER2_DOP_NEWNZ:
 			dio->bp = getblk(dio->devvp, lblkno, dio->psize, 0, 0);
@@ -239,7 +239,7 @@ hammer2_io_getblk(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
 		error = hammer2_bread(hmp, dio, lblkno);
 		if (dio->bp) {
 			KKASSERT(error == 0);
-			switch (op) {
+			switch(op) {
 			case HAMMER2_DOP_NEW:
 				bzero(hammer2_io_data(dio, lbase), lsize);
 				/* fall through */
@@ -256,7 +256,7 @@ hammer2_io_getblk(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
 	/* XXX
 	if (dio->bp)
 		BUF_KERNPROC(dio->bp);
-	*/
+	 */
 
 	dio->error = error;
 	if (error == 0)
@@ -478,12 +478,12 @@ hammer2_io_data(hammer2_io_t *dio, hammer2_off_t lbase)
 	off = (lbase & ~HAMMER2_OFF_MASK_RADIX) - b_offset;
 	KASSERTMSG(off >= 0 && off < bp->b_bufsize, "bad offset");
 
-	return (bp->b_data + off);
+	return(bp->b_data + off);
 }
 
 int
 hammer2_io_new(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
-    hammer2_io_t **diop)
+	       hammer2_io_t **diop)
 {
 	*diop = hammer2_io_getblk(hmp, btype, lbase, lsize, HAMMER2_DOP_NEW);
 	return ((*diop)->error);
@@ -491,7 +491,7 @@ hammer2_io_new(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
 
 int
 hammer2_io_newnz(hammer2_dev_t *hmp, int btype, hammer2_off_t lbase, int lsize,
-    hammer2_io_t **diop)
+		 hammer2_io_t **diop)
 {
 	*diop = hammer2_io_getblk(hmp, btype, lbase, lsize, HAMMER2_DOP_NEWNZ);
 	return ((*diop)->error);
@@ -539,7 +539,7 @@ hammer2_io_bwrite(hammer2_io_t **diop)
 	atomic_set_64(&(*diop)->refs, HAMMER2_DIO_DIRTY | HAMMER2_DIO_FLUSH);
 	hammer2_io_putblk(diop);
 
-	return (0); /* XXX */
+	return (0);	/* XXX */
 }
 
 void
@@ -617,7 +617,6 @@ hammer2_io_hash_lookup(hammer2_dev_t *hmp, hammer2_off_t pbase, uint64_t *refsp)
 
 	if (refsp)
 		*refsp = 0;
-
 	hash = hammer2_io_hashv(hmp, pbase);
 	//hammer2_spin_sh(&hash->spin);
 	for (dio = hash->base; dio; dio = dio->next) {
@@ -655,7 +654,6 @@ hammer2_io_hash_enter(hammer2_dev_t *hmp, hammer2_io_t *dio, uint64_t *refsp)
 
 	if (refsp)
 		*refsp = 0;
-
 	hash = hammer2_io_hashv(hmp, dio->pbase);
 	//hammer2_spin_ex(&hash->spin);
 	for (xiop = &hash->base; (xio = *xiop) != NULL; xiop = &xio->next) {
@@ -691,12 +689,11 @@ hammer2_io_hash_cleanup(hammer2_dev_t *hmp, int dio_limit)
 	count = hmp->iofree_count - dio_limit + 32;
 	if (count <= 0)
 		return;
-
 	cleanbase = NULL;
 	cleanapp = &cleanbase;
+
 	i = hmp->io_iterator++;
 	maxscan = HAMMER2_IOHASH_SIZE;
-
 	while (count > 0 && maxscan--) {
 		hash = &hmp->iohash[i & HAMMER2_IOHASH_MASK];
 		//hammer2_spin_ex(&hash->spin);
@@ -756,6 +753,7 @@ hammer2_io_hash_cleanup_all(hammer2_dev_t *hmp)
 
 	for (i = 0; i < HAMMER2_IOHASH_SIZE; ++i) {
 		hash = &hmp->iohash[i];
+
 		while ((dio = hash->base) != NULL) {
 			hash->base = dio->next;
 			dio->next = NULL;

@@ -269,14 +269,17 @@ hammer2_inode_lock(hammer2_inode_t *ip, int how)
  */
 void
 hammer2_inode_lock4(hammer2_inode_t *ip1, hammer2_inode_t *ip2,
-    hammer2_inode_t *ip3, hammer2_inode_t *ip4)
+		    hammer2_inode_t *ip3, hammer2_inode_t *ip4)
 {
-	hammer2_inode_t *ips[4], *iptmp, *ipslp;
+	hammer2_inode_t *ips[4];
+	hammer2_inode_t *iptmp;
+	hammer2_inode_t *ipslp;
 	hammer2_depend_t *depend;
 	hammer2_pfs_t *pmp;
-	size_t count, i;
+	size_t count;
+	size_t i;
 
-	pmp = ip1->pmp; /* may be NULL */
+	pmp = ip1->pmp;			/* may be NULL */
 	KKASSERT(pmp == ip2->pmp);
 
 	ips[0] = ip1;
@@ -297,6 +300,7 @@ hammer2_inode_lock4(hammer2_inode_t *ip1, hammer2_inode_t *ip2,
 
 	for (i = 0; i < count; ++i)
 		hammer2_inode_ref(ips[i]);
+
 restart:
 	/* Lock the inodes in order. */
 	for (i = 0; i < count; ++i)
@@ -410,9 +414,10 @@ hammer2_inode_chain(hammer2_inode_t *ip, int clindex, int how)
 
 hammer2_chain_t *
 hammer2_inode_chain_and_parent(hammer2_inode_t *ip, int clindex,
-    hammer2_chain_t **parentp, int how)
+			       hammer2_chain_t **parentp, int how)
 {
-	hammer2_chain_t *chain, *parent;
+	hammer2_chain_t *chain;
+	hammer2_chain_t *parent;
 
 	for (;;) {
 		hammer2_spin_sh(&ip->cluster_spin);
@@ -481,6 +486,7 @@ inumhash(hammer2_pfs_t *pmp, hammer2_tid_t inum)
 	return (&pmp->inumhash[hv & HAMMER2_INUMHASH_MASK]);
 }
 
+
 /*
  * Lookup an inode by inode number.
  */
@@ -504,8 +510,7 @@ hammer2_inode_lookup(hammer2_pfs_t *pmp, hammer2_tid_t inum)
 		}
 		hammer2_spin_unsh(&hash->spin);
 	}
-
-	return (ip);
+	return(ip);
 }
 
 /*
@@ -555,9 +560,10 @@ hammer2_inode_drop(hammer2_inode_t *ip)
 					*xipp = ip->next;
 					ip->next = NULL;
 					atomic_clear_int(&ip->flags,
-					    HAMMER2_INODE_ONHASH);
+						     HAMMER2_INODE_ONHASH);
 				}
 				hammer2_spin_unex(&hash->spin);
+
 				ip->pmp = NULL;
 
 				/*
@@ -691,14 +697,15 @@ loop:
  */
 hammer2_inode_t *
 hammer2_inode_get(hammer2_pfs_t *pmp, hammer2_xop_head_t *xop,
-    hammer2_tid_t inum, int idx)
+		  hammer2_tid_t inum, int idx)
 {
 	hammer2_inum_hash_t *hash;
 	hammer2_inode_t *nip, *xip, **xipp;
 	const hammer2_inode_data_t *iptmp, *nipdata;
 
 	KKASSERT(xop == NULL ||
-	    hammer2_cluster_type(&xop->cluster) == HAMMER2_BREF_TYPE_INODE);
+		 hammer2_cluster_type(&xop->cluster) ==
+		 HAMMER2_BREF_TYPE_INODE);
 	KKASSERT(pmp);
 
 	if (xop) {
@@ -736,7 +743,7 @@ again:
 		if (xop) {
 			if (idx >= 0)
 				hammer2_inode_repoint_one(nip, &xop->cluster,
-				    idx);
+							  idx);
 			else
 				hammer2_inode_repoint(nip, &xop->cluster);
 		}
@@ -804,7 +811,6 @@ again:
 
 		hammer2_spin_unex(&hash->spin);
 	}
-
 	return (nip);
 }
 
@@ -816,8 +822,9 @@ again:
  * onto the media.
  */
 hammer2_inode_t *
-hammer2_inode_create_pfs(hammer2_pfs_t *spmp, const char *name, size_t name_len,
-    int *errorp)
+hammer2_inode_create_pfs(hammer2_pfs_t *spmp,
+		     const char *name, size_t name_len,
+		     int *errorp)
 {
 	hammer2_xop_create_t *xop;
 	hammer2_xop_scanlhc_t *sxop;
@@ -860,6 +867,7 @@ hammer2_inode_create_pfs(hammer2_pfs_t *spmp, const char *name, size_t name_len,
 		++lhc;
 	}
 	hammer2_xop_retire(&sxop->head, HAMMER2_XOPMASK_VOP);
+
 	if (error) {
 		if (error != HAMMER2_ERROR_ENOENT)
 			goto done2;
@@ -876,9 +884,11 @@ hammer2_inode_create_pfs(hammer2_pfs_t *spmp, const char *name, size_t name_len,
 	xop->lhc = lhc;
 	xop->flags = HAMMER2_INSERT_PFSROOT;
 	bzero(&xop->meta, sizeof(xop->meta));
+
 	xop->meta.type = HAMMER2_OBJTYPE_DIRECTORY;
 	xop->meta.inum = 1;
 	xop->meta.iparent = pip_inum;
+
 	/* Inherit parent's inode compression mode. */
 	xop->meta.comp_algo = pip_comp_algo;
 	xop->meta.check_algo = pip_check_algo;
@@ -887,11 +897,14 @@ hammer2_inode_create_pfs(hammer2_pfs_t *spmp, const char *name, size_t name_len,
 	xop->meta.mtime = xop->meta.ctime;
 	xop->meta.mode = 0755;
 	xop->meta.nlinks = 1;
+
 	hammer2_xop_setname(&xop->head, name, name_len);
 	xop->meta.name_len = name_len;
 	xop->meta.name_key = lhc;
 	KKASSERT(name_len < HAMMER2_INODE_MAXNAME);
+
 	hammer2_xop_start(&xop->head, &hammer2_inode_create_desc);
+
 	error = hammer2_xop_collect(&xop->head, 0);
 	if (error) {
 		*errorp = error;
@@ -927,8 +940,9 @@ done2:
  * Caller must be in a normal transaction.
  */
 hammer2_inode_t *
-hammer2_inode_create_normal(hammer2_inode_t *pip, struct vattr *vap,
-    struct ucred *cred, hammer2_key_t inum, int *errorp)
+hammer2_inode_create_normal(hammer2_inode_t *pip,
+			    struct vattr *vap, struct ucred *cred,
+			    hammer2_key_t inum, int *errorp)
 {
 	hammer2_xop_create_t *xop;
 	hammer2_inode_t *dip, *nip;
@@ -951,7 +965,7 @@ hammer2_inode_create_normal(hammer2_inode_t *pip, struct vattr *vap,
 	nip = hammer2_inode_get(dip->pmp, NULL, inum, -1);
 	nip->comp_heuristic = 0;
 	KKASSERT((nip->flags & HAMMER2_INODE_CREATING) == 0 &&
-	    nip->cluster.nchains == 0);
+		 nip->cluster.nchains == 0);
 	atomic_set_int(&nip->flags, HAMMER2_INODE_CREATING);
 
 	/* Setup the inode meta-data. */
@@ -1012,11 +1026,13 @@ hammer2_inode_create_normal(hammer2_inode_t *pip, struct vattr *vap,
 	xop->lhc = inum;
 	xop->flags = 0;
 	xop->meta = nip->meta;
+
 	xop->meta.name_len = hammer2_xop_setname_inum(&xop->head, inum);
 	xop->meta.name_key = inum;
 	nip->meta.name_len = xop->meta.name_len;
 	nip->meta.name_key = xop->meta.name_key;
 	hammer2_inode_modify(nip);
+
 	/*
 	 * Create the inode media chains but leave them detached.  We are
 	 * not in a flush transaction so we can't mess with media topology
@@ -1027,6 +1043,7 @@ hammer2_inode_create_normal(hammer2_inode_t *pip, struct vattr *vap,
 	 * filesystem sync.
 	 */
 	hammer2_xop_start(&xop->head, &hammer2_inode_create_det_desc);
+
 	error = hammer2_xop_collect(&xop->head, 0);
 	if (error) {
 		*errorp = error;
@@ -1054,7 +1071,7 @@ done:
  */
 int
 hammer2_dirent_create(hammer2_inode_t *dip, const char *name, size_t name_len,
-    hammer2_key_t inum, uint8_t type)
+		      hammer2_key_t inum, uint8_t type)
 {
 	hammer2_xop_mkdirent_t *xop;
 	hammer2_xop_scanlhc_t *sxop;
@@ -1090,6 +1107,7 @@ hammer2_dirent_create(hammer2_inode_t *dip, const char *name, size_t name_len,
 		++lhc;
 	}
 	hammer2_xop_retire(&sxop->head, HAMMER2_XOPMASK_VOP);
+
 	if (error) {
 		if (error != HAMMER2_ERROR_ENOENT)
 			goto done2;
@@ -1108,10 +1126,14 @@ hammer2_dirent_create(hammer2_inode_t *dip, const char *name, size_t name_len,
 	xop->dirent.inum = inum;
 	xop->dirent.type = type;
 	xop->dirent.namlen = name_len;
+
 	KKASSERT(name_len < HAMMER2_INODE_MAXNAME);
 	hammer2_xop_setname(&xop->head, name, name_len);
+
 	hammer2_xop_start(&xop->head, &hammer2_inode_mkdirent_desc);
+
 	error = hammer2_xop_collect(&xop->head, 0);
+
 	hammer2_xop_retire(&xop->head, HAMMER2_XOPMASK_VOP);
 done2:
 	return (hammer2_error_to_errno(error));
@@ -1127,7 +1149,8 @@ static void
 hammer2_inode_repoint(hammer2_inode_t *ip, hammer2_cluster_t *cluster)
 {
 	hammer2_chain_t *dropch[HAMMER2_MAXCLUSTER];
-	hammer2_chain_t *ochain, *nchain;
+	hammer2_chain_t *ochain;
+	hammer2_chain_t *nchain;
 	int i;
 
 	bzero(dropch, sizeof(dropch));
@@ -1210,10 +1233,11 @@ hammer2_inode_repoint(hammer2_inode_t *ip, hammer2_cluster_t *cluster)
  */
 static void
 hammer2_inode_repoint_one(hammer2_inode_t *ip, hammer2_cluster_t *cluster,
-    int idx)
+			  int idx)
 {
 	hammer2_chain_t *dropch[HAMMER2_MAXCLUSTER];
-	hammer2_chain_t *ochain, *nchain;
+	hammer2_chain_t *ochain;
+	hammer2_chain_t *nchain;
 	int i;
 
 	/* Drop any cached (typically data) chains related to this inode. */
@@ -1249,7 +1273,6 @@ hammer2_inode_repoint_one(hammer2_inode_t *ip, hammer2_cluster_t *cluster,
 		ip->cluster.array[idx].chain = nchain;
 	}
 	hammer2_spin_unex(&ip->cluster_spin);
-
 	if (ochain != nchain) {
 		if (nchain)
 			hammer2_chain_ref(nchain);
@@ -1312,7 +1335,7 @@ hammer2_inode_unlink_finisher(hammer2_inode_t *ip, struct vnode **vprecyclep)
 {
 	struct vnode *vp;
 	uint64_t ctime;
-	
+
 	/*
 	 * Decrement nlinks.  Catch a bad nlinks count here too (e.g. 0 or
 	 * negative), and just assume a transition to 0.
@@ -1344,7 +1367,7 @@ hammer2_inode_unlink_finisher(hammer2_inode_t *ip, struct vnode **vprecyclep)
 		if (vp == NULL) {
 			if ((ip->flags & HAMMER2_INODE_DELETING) == 0) {
 				atomic_set_int(&ip->flags,
-				    HAMMER2_INODE_DELETING);
+					       HAMMER2_INODE_DELETING);
 				hammer2_inode_delayed_sideq(ip);
 			}
 			return (0);
@@ -1491,7 +1514,7 @@ hammer2_inode_chain_sync(hammer2_inode_t *ip)
 			}
 			xop->osize = ip->osize;
 		} else {
-			xop->osize = ip->meta.size; /* safety */
+			xop->osize = ip->meta.size;	/* safety */
 		}
 		xop->ipflags = ip->flags;
 		xop->meta = ip->meta;
@@ -1566,6 +1589,7 @@ hammer2_inode_chain_des(hammer2_inode_t *ip)
 		hammer2_xop_start(&xop->head, &hammer2_inode_destroy_desc);
 		error = hammer2_xop_collect(&xop->head, 0);
 		hammer2_xop_retire(&xop->head, HAMMER2_XOPMASK_VOP);
+
 		if (error == HAMMER2_ERROR_ENOENT)
 			error = 0;
 		if (error) {
