@@ -358,6 +358,7 @@
 ./sbin/bioctl
 ./sbin/chown
 ./sbin/clri
+./sbin/destroy_hammer2
 ./sbin/dhcp6leased
 ./sbin/dhcpleased
 ./sbin/disklabel
@@ -411,6 +412,7 @@
 ./sbin/quotacheck
 ./sbin/rdump
 ./sbin/reboot
+./sbin/reconstruct_hammer2
 ./sbin/resolvd
 ./sbin/restore
 ./sbin/route

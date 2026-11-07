@@ -1,7 +1,7 @@
 .include <bsd.own.mk>
 
 PROG=	reconstruct_hammer2
-SRCS=	destroy.c ondisk.c subs.c xxhash.c icrc32.c
+SRCS=	reconstruct.c ondisk.c subs.c xxhash.c icrc32.c
 NOMAN=	yes
 
 .PATH:  ${.CURDIR}/../hammer2 ${.CURDIR}/../../sys/lib/libkern  ${.CURDIR}/../../sys/hammer2  ${.CURDIR}/../../sys/hammer2/xxhash
